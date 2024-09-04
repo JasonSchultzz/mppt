@@ -1,5 +1,5 @@
 [project]
-name = "project_or_module_name"
+name = "mppt"
 description = "A_short_description"
 
 # If a project, then you can specify version here
@@ -11,8 +11,8 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
-  {email = "matthew@davidson.engineering"},
-  {name = "Matthew Davidson"}
+  {email = "jason.schultz@hotmail.ca"},
+  {name = "Jason Schultz"}
 ]
 
 classifiers = [
@@ -24,17 +24,18 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-# dependencies = [
-#    "numpy",
-#    "my_module @ git+https://github.com/my_github/my_repo.git@tag", 
-# ]
+dependencies = [
+   "pyside6",
+   "pymeasure",
+  #  "my_module @ git+https://github.com/my_github/my_repo.git@tag", 
+]
 # Use this line if your project comprises of modules only without any ./src/* files
 #[tool.setuptools]
 #py-modules = []
 
 # If a module, then use fetch version from src/module_name/__init__.py
 [tool.setuptools.dynamic]
-version = {attr = "module0.__version__"}
+version = {attr = "mppt.__version__"}
 
 
 [project.optional-dependencies]
