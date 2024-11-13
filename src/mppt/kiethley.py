@@ -9,18 +9,45 @@
 # ---------------------------------------------------------------------------
 
 from pymeasure.instruments.keithley import Keithley2400
+import numpy as np
+import pandas as pd
+from time import sleep
 
-with Keithley2400("GPIB::1") as keithley:
+GPIB_connection = "GPIB::24"
+data_points = 50
+averages = 10
+max_voltage = 1.2
+min_voltage = 0
 
-    keithley.apply_current()                # Sets up to source current
-    keithley.source_current_range = 10e-3   # Sets the source current range to 10 mA
-    keithley.compliance_voltage = 10        # Sets the compliance voltage to 10 V
-    keithley.source_current = 0             # Sets the source current to 0 mA
-    keithley.enable_source()                # Enables the source output
+voltage = np.linspace(min_voltage, max_voltage, data_points)
+current = np.zeros_like(voltage)
+current_stds = np.zeros_like(voltage)
+print(voltage)
 
-    keithley.measure_voltage()              # Sets up to measure voltage
 
-    keithley.ramp_to_current(5e-3)          # Ramps the current to 5 mA
-    print(keithley.voltage)                 # Prints the voltage in Volts
+with Keithley2400(GPIB_connection) as keithley:
+    print(keithley.id)
 
-    keithley.shutdown()                     # Ramps the current to 0 mA and disables output
+    keithley.reset()
+    keithley.use_front_terminals()
+    keithley.apply_voltage()
+    keithley.measure_current()
+
+    keithley.enable_source()
+
+    # JV sweep
+    for (i, v) in enumerate(voltage):
+        keithley.config_buffer(averages)
+        keithley.source_voltage(v)
+        keithley.start_buffer()
+        keithley.wait_for_buffer()
+        current[i] = keithley.means[0]
+        sleep(1.0)
+        current_stds[i] = keithley.standard_devs[0]
+
+    data = pd.DataFrame({
+        "Voltage (V)": voltage,
+        "Current (A)": current,
+        "Current Std (A)": current_stds
+    })
+    data.to_csv("./output/test.csv")
