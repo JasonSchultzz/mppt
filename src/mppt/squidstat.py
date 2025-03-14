@@ -1,13 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# ----------------------------------------------------------------------------
-# Created By  : Jason Schultz
-# Created Date: 2024-08-05
-# version ='1.0'
-# ---------------------------------------------------------------------------
-"""a_short_module_description"""
-# ---------------------------------------------------------------------------
-
 import sys
 import os
 import struct
@@ -48,6 +38,9 @@ class MpptManager:
         for channel_name in channel_names:
             self.channel_data.append(MpptData(channel_name))
 
+        self.window = LivePlotter()
+        self.window.show()
+
         self.path = path
         self.tracker = AisDeviceTracker.Instance()
         self.tracker.newDeviceConnected.connect(lambda deviceName: print("Device is Connected: %s" % deviceName))
@@ -61,7 +54,7 @@ class MpptManager:
                                         data.current
                                     )
         )
-        self.handler.experimentStopped.connect(lambda channel : self.experiment_finished(channel))
+        self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
 
 
     def set_mppt_testing_parameters(
@@ -157,6 +150,7 @@ class MpptManager:
             self.output_JV_data_to_csv(channel)
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(MPP_STATE):
+                self.window.update_plot_data(self.channel_data)
                 self.start_MPP()
 
         elif self.channel_data[channel].state == MPP_STATE:
@@ -185,9 +179,18 @@ class MpptData:
         self.sweep_data_list = []
         self.name = name
         self.state = JV_SWEEP_STATE
-        self.initial_efficiencies = (None, None)
-        self.initial_timestamp = (None, None)
+
+        # Initial recorded values as tuples: (forward, reverse)
+        self.initial_voltages = (None, None)
+        self.initial_current_densities = (None, None)
+        self.initial_timestamps = (None, None)
+        self.forward_relative_efficiencies = []
+        self.reverse_relative_efficiencies = []
+        self.forward_durations = []
+        self.reverse_durations = []
+
         self.Vmpp = None
+        self.first: bool = True
 
 
     def append_JV_sweep_data(self, voltage: float, current: float):
@@ -233,25 +236,53 @@ class MpptData:
                 "PCE (%)": efficiency
             }))
 
-            mpp_index = np.argmin(power_density)
+            mpp_index = np.argmax(power_density)
             Vmpp = voltage[mpp_index]
             Jsc = np.interp(0, voltage, current_density)
+            Jmpp = current_density[mpp_index]
+            FF = Vmpp*Jmpp*100/(Voc*Jsc)
+            mpp_efficiency = efficiency[mpp_index]
 
             if i == 0:
                 direction = "Forward"
                 Voc = np.interp(0, current_density, voltage)
                 self.Vmpp = Vmpp
+                if self.first:
+                    initial_forward_voltage = voltage
+                    initial_forward_current_density = current_density
+                    relative_efficiency = 1
+                    self.forward_relative_efficiencies.append(relative_efficiency)
+                    initial_forward_timestamp = datetime.now()
+                    self.forward_durations.append(0)
+                else:
+                    initial_forward_timestamp, _ = self.initial_timestamps
+                    relative_efficiency = mpp_efficiency/self.forward_relative_efficiencies[0]
+                    self.forward_relative_efficiencies.append(relative_efficiency)
+                    duration = (datetime.now() - initial_forward_timestamp).seconds/60
+                    self.forward_durations.append(duration)
+
             elif i == 1:
                 direction = "Reverse"
                 Voc = np.interp(0, current_density[::-1], voltage[::-1])
+                if self.first:
+                    initial_reverse_voltage = voltage
+                    initial_reverse_current_density = current_density
+                    relative_efficiency = 1
+                    self.reverse_relative_efficiencies.append(relative_efficiency)
+                    initial_reverse_timestamp = datetime.now()
+                    self.reverse_durations.append(0)
+                else:
+                    _, initial_reverse_timestamp = self.initial_timestamps
+                    relative_efficiency = mpp_efficiency/self.reverse_relative_efficiencies[0]
+                    self.reverse_relative_efficiencies.append(relative_efficiency)
+                    duration = (datetime.now() - initial_reverse_timestamp).seconds/60
+                    self.forward_durations.append(duration)
                 
-            Jmpp = current_density[mpp_index]
-            FF = Vmpp*Jmpp*100/(Voc*Jsc)
-            t = datetime.now()
             compiled_data = pd.DataFrame({
-                "Time": [t],
-                "Direction": direction,
-                "PCE (%)": [power_density[mpp_index]*100/solar_irradiance],
+                "Duration": [duration],
+                "Direction": [direction],
+                "Normalized PCE": [relative_efficiency],
+                "PCE (%)": [mpp_efficiency],
                 "FF (%)": [FF],
                 "Vmpp (V)": [Vmpp],
                 "Jmpp (mA/cm2)": [Jmpp],
@@ -267,6 +298,12 @@ class MpptData:
         # Need to check that both max efficiencies are above initial efficiency
         self.state = MPP_STATE
         self.sweep_data_list = []
+
+        if self.first:
+            self.initial_voltages = (initial_forward_voltage, initial_reverse_voltage)
+            self.initial_current_densities = (initial_forward_current_density, initial_reverse_current_density)
+            self.initial_timestamps = (initial_forward_timestamp, initial_reverse_timestamp)
+            self.first = False
 
 
 class LivePlotter(QMainWindow):
@@ -314,7 +351,7 @@ class LivePlotter(QMainWindow):
 
         # Create the intial plots
         for i, ax in enumerate(self.axes):
-            ax.plot(self.x_data, self.y_data[i])
+            ax.plot()
             if i == 4:
                 ax.set_xlabel("Duration")
                 ax.set_ylabel("Normalized PCE")
@@ -325,15 +362,38 @@ class LivePlotter(QMainWindow):
                 ax.set_title(f"Channel {i+1} JV Data")
 
 
-    def update_plot_data(self):
-        # Simulate changing data
-        self.y_data[0] = np.sin(self.x_data)
-
+    def update_plot_data(self, channel_data: list[MpptData]) -> None:
         # Update each plot
-        for i, ax in enumerate(self.axes):
+        self.axes[4].clear()
+        for i, data in enumerate(channel_data):
+            ax = self.axes[i]
             ax.clear()  # Clear the old plot
-            ax.plot(self.x_data, self.y_data[i])
-            ax.set_title(f"Plot {i + 1}")  # Set plot title
+            forward_voltage, reverse_voltage = data.initial_voltages
+            forward_current_density, reverse_current_density = data.initial_current_densities
+
+            # Plot the initial JV sweep
+            ax.plot(forward_voltage, forward_current_density, ls = ":", color = 'b', label = "Original Forward")
+            ax.plot(reverse_voltage, reverse_current_density, ls = ":", color = 'o', label = "Original Reverse")
+
+            # NOTE: THIS NEEDDS TO BE A COPY OF THE NEWEST JV RESULT
+            forward_voltage, reverse_voltage = data.initial_voltages
+            forward_current_density, reverse_current_density = data.initial_current_densities
+
+            # Plot the latest JV sweep
+            ax.plot(forward_voltage, forward_current_density, color = 'b', label = "Current Forward")
+            ax.plot(reverse_voltage, reverse_current_density, color = 'o', label = "Current Reverse")
+
+            # Set plots lables
+            ax.set_xlabel("Voltage (V)")
+            ax.set_ylabel("Current Density ($mA/cm^{2}$)")
+            ax.set_title(f"Channel {i+1} JV Data")
+
+            # Update MPPT plot
+            self.axes[4].plot()
+        
+        self.axes[4].set_xlabel("Duration")
+        self.axes[4].set_ylabel("Normalized PCE")
+        self.axes[4].set_title("MPPT")
 
         # Refresh the canvas to reflect the changes
         for canvas_item in self.canvas:
@@ -341,24 +401,22 @@ class LivePlotter(QMainWindow):
 
 
 app = QApplication()
-window = LivePlotter()
-window.show()
-# manager = MpptManager(
-#     path = "./output",
-#     port = "COM3",
-#     device_name = "Prime2809",
-#     channel_names = ["test0", "test1", "test2", "test3"]
-# )
-# manager.set_mppt_testing_parameters(
-#     low_voltage = -0.2,     # V
-#     high_voltage = 1.2,     # V
-#     sweep_data_points = 140,
-#     step_time = 0.07,       # s
-#     scan_time = 0.06,       # s
-#     cell_area = 0.16,       # cm2
-#     solar_irradiance = 100,  # mW/cm2,
-#     constant_voltage_duration = 60  # s
-# )
-# manager.start_JVsweep()
+manager = MpptManager(
+    path = "./output",
+    port = "COM3",
+    device_name = "Prime2809",
+    channel_names = ["test0", "test1", "test2", "test3"]
+)
+manager.set_mppt_testing_parameters(
+    low_voltage = -0.2,     # V
+    high_voltage = 1.2,     # V
+    sweep_data_points = 140,
+    step_time = 0.07,       # s
+    scan_time = 0.06,       # s
+    cell_area = 0.16,       # cm2
+    solar_irradiance = 100,  # mW/cm2,
+    constant_voltage_duration = 60  # s
+)
+manager.start_JVsweep()
 
 sys.exit(app.exec())
