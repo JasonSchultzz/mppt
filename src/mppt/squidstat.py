@@ -3,7 +3,6 @@ import os
 import struct
 import numpy as np
 import pandas as pd
-import pyqtgraph as pg
 from datetime import datetime
 from PySide6.QtCore import QIODevice, QDataStream, QByteArray, QThread, QObject, Signal
 from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
@@ -182,8 +181,8 @@ class MpptData:
 
         # Initial recorded values as tuples: (forward, reverse)
         self.initial_voltages = (None, None)
-        self.recent_voltages = (None, None)
         self.initial_current_densities = (None, None)
+        self.recent_voltages = (None, None)
         self.recent_current_densities = (None, None)
         self.initial_timestamps = (None, None)
         self.forward_relative_efficiencies = []
@@ -257,6 +256,8 @@ class MpptData:
                     self.forward_durations.append(0)
                     duration = 0
                 else:
+                    recent_forward_voltage = voltage
+                    recent_forward_current_density = current_density
                     initial_forward_timestamp, _ = self.initial_timestamps
                     relative_efficiency = mpp_efficiency/self.forward_relative_efficiencies[0]
                     self.forward_relative_efficiencies.append(relative_efficiency)
@@ -276,11 +277,13 @@ class MpptData:
                     self.reverse_durations.append(0)
                     duration = 0
                 else:
+                    recent_reverse_voltage = voltage
+                    recent_reverse_current_density = current_density
                     _, initial_reverse_timestamp = self.initial_timestamps
                     relative_efficiency = mpp_efficiency/self.reverse_relative_efficiencies[0]
                     self.reverse_relative_efficiencies.append(relative_efficiency)
                     duration = (datetime.now() - initial_reverse_timestamp).seconds/60
-                    self.forward_durations.append(duration)
+                    self.reverse_durations.append(duration)
 
             FF = Vmpp*Jmpp*100/(Voc*Jsc)
 
@@ -301,7 +304,6 @@ class MpptData:
         results[0].to_csv(f"{path}/forward_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/forward_sweep_data.csv"))
         results[1].to_csv(f"{path}/reverse_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_sweep_data.csv"))
 
-        # Need to check that both max efficiencies are above initial efficiency
         self.state = MPP_STATE
         self.sweep_data_list = []
 
@@ -311,8 +313,8 @@ class MpptData:
             self.initial_timestamps = (initial_forward_timestamp, initial_reverse_timestamp)
             self.first = False
         else:
-            # NOTE: Need to pass recent data
-            pass
+            self.recent_voltages = (recent_forward_voltage, recent_reverse_voltage)
+            self.recent_current_densities = (recent_forward_current_density, recent_reverse_current_density)
 
 
 class LivePlotter(QMainWindow):
@@ -374,6 +376,7 @@ class LivePlotter(QMainWindow):
     def update_plot_data(self, channel_data: list[MpptData]) -> None:
         # Update each plot
         self.axes[4].clear()
+        mppt_channel_colors = ["r", "b", "g", "m"]
         for i, data in enumerate(channel_data):
             ax = self.axes[i]
             ax.clear()  # Clear the old plot
@@ -381,26 +384,27 @@ class LivePlotter(QMainWindow):
             forward_current_density, reverse_current_density = data.initial_current_densities
 
             # Plot the initial JV sweep
-            ax.plot(forward_voltage, forward_current_density, ls = ":", color = 'b', label = "Original Forward")
-            ax.plot(reverse_voltage, reverse_current_density, ls = ":", color = 'r', label = "Original Reverse")
+            ax.plot(forward_voltage, forward_current_density, color = 'b', label = "Initial Forward")
+            ax.plot(reverse_voltage, reverse_current_density, color = 'r', label = "Initial Reverse")
 
-            # NOTE: THIS NEEDDS TO BE A COPY OF THE NEWEST JV RESULT
-            forward_voltage, reverse_voltage = data.initial_voltages
-            forward_current_density, reverse_current_density = data.initial_current_densities
+            if (all(x is not None for x in data.recent_voltages)) and (all(y is not None for y in data.recent_current_densities)):
+                forward_voltage, reverse_voltage = data.recent_voltages
+                forward_current_density, reverse_current_density = data.recent_current_densities
 
-            # Plot the latest JV sweep
-            ax.plot(forward_voltage, forward_current_density, color = 'b', label = "Current Forward")
-            ax.plot(reverse_voltage, reverse_current_density, color = 'r', label = "Current Reverse")
+                # Plot the latest JV sweep
+                ax.plot(forward_voltage, forward_current_density, ls = ":", color = 'b', label = "Recent Forward")
+                ax.plot(reverse_voltage, reverse_current_density, ls = ":", color = 'r', label = "Recent Reverse")
 
             # Set plots lables
             ax.set_xlabel("Voltage (V)")
             ax.set_ylabel("Current Density ($mA/cm^{2}$)")
             ax.set_title(f"Channel {i+1} JV Data")
+            ax.set_ylim(0)
             ax.legend()
 
             # Update MPPT plot
-            self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, label = f"Forward {i+1}")
-            self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, label = f"Reverse {i+1}")
+            self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, color = mppt_channel_colors[i], label = f"Forward {i+1}")
+            self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, color = mppt_channel_colors[i], ls = ":", label = f"Reverse {i+1}")
         
         self.axes[4].set_xlabel("Duration")
         self.axes[4].set_ylabel("Normalized PCE")
@@ -415,13 +419,13 @@ class LivePlotter(QMainWindow):
 app = QApplication()
 manager = MpptManager(
     path = "./output",
-    port = "COM3",
+    port = "COM4",
     device_name = "Prime2809",
     channel_names = ["2025-03-14-Si-test1", "2025-03-14-Si-test2"]
 )
 manager.set_mppt_testing_parameters(
-    low_voltage = -0.2,     # V
-    high_voltage = 0.6,     # V
+    low_voltage = 0,     # V
+    high_voltage = 0.56,     # V
     sweep_data_points = 120,
     step_time = 0.07,       # s
     scan_time = 0.06,       # s
