@@ -185,6 +185,7 @@ class MpptData:
         self.recent_voltages = (None, None)
         self.recent_current_densities = (None, None)
         self.initial_timestamps = (None, None)
+        self.initial_efficiencies = (None, None)
         self.forward_relative_efficiencies = []
         self.reverse_relative_efficiencies = []
         self.forward_durations = []
@@ -253,13 +254,15 @@ class MpptData:
                     relative_efficiency = 1
                     self.forward_relative_efficiencies.append(relative_efficiency)
                     initial_forward_timestamp = datetime.now()
-                    self.forward_durations.append(0)
                     duration = 0
+                    self.forward_durations.append(duration)
+                    initial_forward_efficiency = mpp_efficiency
                 else:
                     recent_forward_voltage = voltage
                     recent_forward_current_density = current_density
                     initial_forward_timestamp, _ = self.initial_timestamps
-                    relative_efficiency = mpp_efficiency/self.forward_relative_efficiencies[0]
+                    initial_forward_efficiency, _ = self.initial_efficiencies
+                    relative_efficiency = mpp_efficiency/initial_forward_efficiency
                     self.forward_relative_efficiencies.append(relative_efficiency)
                     duration = (datetime.now() - initial_forward_timestamp).seconds/60
                     self.forward_durations.append(duration)
@@ -274,13 +277,15 @@ class MpptData:
                     relative_efficiency = 1
                     self.reverse_relative_efficiencies.append(relative_efficiency)
                     initial_reverse_timestamp = datetime.now()
-                    self.reverse_durations.append(0)
                     duration = 0
+                    self.reverse_durations.append(duration)
+                    initial_reverse_efficiency = mpp_efficiency
                 else:
                     recent_reverse_voltage = voltage
                     recent_reverse_current_density = current_density
                     _, initial_reverse_timestamp = self.initial_timestamps
-                    relative_efficiency = mpp_efficiency/self.reverse_relative_efficiencies[0]
+                    _, initial_reverse_efficiency = self.initial_efficiencies
+                    relative_efficiency = mpp_efficiency/initial_reverse_efficiency
                     self.reverse_relative_efficiencies.append(relative_efficiency)
                     duration = (datetime.now() - initial_reverse_timestamp).seconds/60
                     self.reverse_durations.append(duration)
@@ -311,6 +316,7 @@ class MpptData:
             self.initial_voltages = (initial_forward_voltage, initial_reverse_voltage)
             self.initial_current_densities = (initial_forward_current_density, initial_reverse_current_density)
             self.initial_timestamps = (initial_forward_timestamp, initial_reverse_timestamp)
+            self.initial_efficiencies = (initial_forward_efficiency, initial_reverse_efficiency)
             self.first = False
         else:
             self.recent_voltages = (recent_forward_voltage, recent_reverse_voltage)
@@ -421,17 +427,22 @@ manager = MpptManager(
     path = "./output",
     port = "COM4",
     device_name = "Prime2809",
-    channel_names = ["2025-03-14-Si-test1", "2025-03-14-Si-test2"]
+    channel_names = [
+        "2025-03-18-Si1",
+        "2025-03-18-Si2",
+        "2025-03-18-Si3",
+        "2025-03-18-Si4",
+        ]
 )
 manager.set_mppt_testing_parameters(
     low_voltage = 0,     # V
-    high_voltage = 0.56,     # V
+    high_voltage = 0.6,     # V
     sweep_data_points = 120,
-    step_time = 0.07,       # s
-    scan_time = 0.06,       # s
+    step_time = 0.10,       # s
+    scan_time = 0.08,       # s
     cell_area = 6,       # cm2
-    solar_irradiance = 100,  # mW/cm2,
-    constant_voltage_duration = 60  # s
+    solar_irradiance = 25,  # mW/cm2,
+    constant_voltage_duration = 30  # s
 )
 manager.start_JVsweep()
 
