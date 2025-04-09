@@ -327,7 +327,7 @@ class LivePlotter(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Live Plot Updates")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(0, 0, 1200, 700)
 
         # Create central widget
         central_widget = QWidget(self)
@@ -340,7 +340,7 @@ class LivePlotter(QMainWindow):
         grid_layout = QGridLayout()
 
         # Create 5 subplots
-        self.figures = [Figure(figsize = (5, 4)) for _ in range(5)]
+        self.figures = [Figure(figsize = (5, 2.5)) for _ in range(5)]
         self.canvas = [FigureCanvas(fig) for fig in self.figures]
 
         # Create axes and plots
@@ -373,6 +373,7 @@ class LivePlotter(QMainWindow):
                 ax.set_xlabel("Duration")
                 ax.set_ylabel("Normalized PCE")
                 ax.set_title("MPPT")
+                
             else:
                 ax.set_xlabel("Voltage (V)")
                 ax.set_ylabel("Current Density ($mA/cm^{2}$)")
@@ -428,18 +429,18 @@ manager = MpptManager(
     port = "COM4",
     device_name = "Prime2809",
     channel_names = [
-        "2025-03-18-Si1",
-        "2025-03-18-Si2",
-        "2025-03-18-Si3",
-        "2025-03-18-Si4",
+        "2025-04-08-Si1",
+        "2025-04-08-Si2",
+        "2025-04-08-Si3",
+        "2025-04-08-Si4",
         ]
 )
 manager.set_mppt_testing_parameters(
     low_voltage = 0,     # V
     high_voltage = 0.6,     # V
-    sweep_data_points = 120,
-    step_time = 0.10,       # s
-    scan_time = 0.08,       # s
+    sweep_data_points = 100,
+    step_time = 0.08,       # s
+    scan_time = 0.06,       # s
     cell_area = 6,       # cm2
     solar_irradiance = 25,  # mW/cm2,
     constant_voltage_duration = 30  # s
