@@ -8,7 +8,10 @@
 """a_short_project_description"""
 # ---------------------------------------------------------------------------
 import numpy as np
+import sys
 import matplotlib.pyplot as plt
+from mppt.squidstat import MpptManager
+from PySide6.QtWidgets import QApplication
 
 
 def ideal_diode_eqn(V):
@@ -67,8 +70,30 @@ def mppt_test():
 
 
 def main():
-    print("hello")
+    app = QApplication()
+    manager = MpptManager(
+        path = "./output",
+        port = "COM3",
+        device_name = "Prime2809",
+        channel_names = [
+            "2025-05-01-psc1",
+            "2025-05-01-psc2",
+            ]
+    )
+    manager.set_mppt_testing_parameters(
+        low_voltage = -0.2,     # V
+        high_voltage = 1.2,     # V
+        sweep_data_points = 100,
+        step_time = 0.08,       # s
+        scan_time = 0.06,       # s
+        cell_area = 0.16,       # cm2
+        solar_irradiance = 100,  # mW/cm2,
+        constant_voltage_duration = 30  # s
+    )
+    manager.start_JVsweep()
+
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    mppt_test()
+    main()

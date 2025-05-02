@@ -102,15 +102,6 @@ class MpptManager:
             self.handler.startUploadedExperiment(i)
 
 
-    # Possibly deprecated?
-    # def start_JVsweep(self, channel: int) -> None:
-    #     assert(isinstance(channel, int))
-    #     assert(channel >= 0)
-    #     assert(channel < len(self.channel_data))
-    #     self.handler.uploadExperimentToChannel(channel, self.experiment)
-    #     self.handler.startUploadedExperiment(channel)
-
-
     def start_MPP(self) -> None:
         assert(self.channel_data)
         for (i, channel) in enumerate(self.channel_data):
@@ -160,7 +151,8 @@ class MpptManager:
 
         else:  # Dead state
             # Need to check that every other channel has reached dead state to quit
-            app.quit()
+            # app.quit()
+            pass
 
 
     def confirm_all_matching_states(self, state: int) -> bool:
@@ -423,28 +415,32 @@ class LivePlotter(QMainWindow):
             canvas_item.draw()
 
 
-app = QApplication()
-manager = MpptManager(
-    path = "./output",
-    port = "COM4",
-    device_name = "Prime2809",
-    channel_names = [
-        "2025-04-08-Si1",
-        "2025-04-08-Si2",
-        "2025-04-08-Si3",
-        "2025-04-08-Si4",
-        ]
-)
-manager.set_mppt_testing_parameters(
-    low_voltage = 0,     # V
-    high_voltage = 0.6,     # V
-    sweep_data_points = 100,
-    step_time = 0.08,       # s
-    scan_time = 0.06,       # s
-    cell_area = 6,       # cm2
-    solar_irradiance = 25,  # mW/cm2,
-    constant_voltage_duration = 30  # s
-)
-manager.start_JVsweep()
+def main():
+    app = QApplication()
+    manager = MpptManager(
+        path = "./output",
+        port = "COM4",
+        device_name = "Prime2809",
+        channel_names = [
+            "2025-04-08-Si1",
+            "2025-04-08-Si2",
+            "2025-04-08-Si3",
+            "2025-04-08-Si4",
+            ]
+    )
+    manager.set_mppt_testing_parameters(
+        low_voltage = 0,     # V
+        high_voltage = 0.6,     # V
+        sweep_data_points = 100,
+        step_time = 0.08,       # s
+        scan_time = 0.06,       # s
+        cell_area = 6,       # cm2
+        solar_irradiance = 25,  # mW/cm2,
+        constant_voltage_duration = 30  # s
+    )
+    manager.start_JVsweep()
 
-sys.exit(app.exec())
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

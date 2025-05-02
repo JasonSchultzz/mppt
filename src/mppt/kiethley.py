@@ -54,32 +54,40 @@ def determine_cell_parameters(
         voltage: ndarray,
         current_density: ndarray,
         power_density: ndarray,
-        solar_power: float
+        solar_power: float,
+        direction: str
 ) -> pd.DataFrame:
     Jsc = np.interp(0, voltage, current_density)
     Voc = np.interp(0, current_density, voltage)
+    print(Jsc)
+    print(Voc)
     mpp_index = np.argmin(power_density)
     Vmpp = voltage[mpp_index]
     Jmpp = current_density[mpp_index]
-    efficiency = power_density[mpp_index]/solar_power
+    efficiency = power_density[mpp_index]*100/solar_power
     FF = Vmpp*Jmpp/(Voc*Jsc)
     t = datetime.now()
+    print(Vmpp)
+    print(Jmpp)
+    print(efficiency)
+    print(FF)
 
     data = pd.DataFrame({
-        "Time": t,
-        "Efficiency (%)": efficiency*100,
-        "Fill Factor": FF,
-        "Vmpp (V)": Vmpp,
-        "Jmpp (mA/cm2)": Jmpp,
-        "Voc (V)": Voc,
-        "Jsc (mA/cm2)": Jsc
+        "Time": [t],
+        "Direction": direction,
+        "Efficiency (%)": [efficiency],
+        "Fill Factor": [FF],
+        "Vmpp (V)": [Vmpp],
+        "Jmpp (mA/cm2)": [Jmpp],
+        "Voc (V)": [Voc],
+        "Jsc (mA/cm2)": [Jsc]
     })
     return data
 
 
-area = 0.16  # cm^2
+area = 6  # cm^2
 solar_power = 100  # mW/cm2
-cell_name = "Elnaz-2"
+cell_name = "2025-03-14-Si-test5"
 
 path = f"./output/{cell_name}"
 if not os.path.exists(path):
@@ -88,7 +96,7 @@ if not os.path.exists(path):
 GPIB_connection = "GPIB::24"
 data_points = 140
 averages = 5
-max_voltage = 1.2
+max_voltage = 0.8
 min_voltage = -0.2
 voltage_sweep_time = 0.07
 
@@ -120,6 +128,9 @@ with Keithley2400(GPIB_connection) as keithley:
     resistance = voltage/current
     current = current*1000/area
     power = voltage*current
+    dataf = determine_cell_parameters(voltage, current, power, solar_power, "Forward")
+    dataf.to_csv(f"{path}/compiled_data.csv")
+    print(dataf)
 
     sleep(1)
     print("JV Reverse Sweep")
@@ -133,6 +144,9 @@ with Keithley2400(GPIB_connection) as keithley:
     resistance_reverse = voltage_reverse/current_reverse
     current_reverse = current_reverse*1000/area
     power_reverse = voltage_reverse*current_reverse
+    datar = determine_cell_parameters(voltage_reverse, current_reverse, power_reverse, solar_power, "Reverse")
+    datar.to_csv(f"{path}/compiled_data.csv", mode = "a", header = False)
+    print(datar)
 
 data = pd.DataFrame({
     "Forward Voltage (V)": voltage,
@@ -147,6 +161,7 @@ data = pd.DataFrame({
     "Reverse Resistance (Ohms)": resistance_reverse
 })
 data.to_csv(f"{path}/data.csv")
+
 
 plt.plot(voltage, current, label = "Forward")
 plt.plot(voltage_reverse, current_reverse, label = "Reverse")
