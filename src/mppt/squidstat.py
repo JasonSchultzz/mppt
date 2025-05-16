@@ -300,9 +300,9 @@ class MpptData:
                 "Jmpp (mA/cm2)": [Jmpp],
                 "Voc (V)": [Voc],
                 "Jsc (mA/cm2)": [Jsc],
-                "Rseries (Ohm)": Rseries,
-                "Rshunt (Ohm)": Rshunt,
-                "Hysteresis Index": hysteresis
+                "Rseries (Ohm)": [Rseries],
+                "Rshunt (Ohm)": [Rshunt],
+                "Hysteresis Index": [hysteresis]
             })
             print(compiled_data)
             compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
