@@ -286,7 +286,7 @@ class MpptData:
                     self.reverse_relative_efficiencies.append(relative_efficiency)
                     duration = (datetime.now() - initial_reverse_timestamp).seconds/60
                     self.reverse_durations.append(duration)
-                hysteresis = (forward_efficiency - reverse_efficiency)/reverse_efficiency * 100
+                hysteresis = (reverse_efficiency - forward_efficiency)/reverse_efficiency
 
             FF = Vmpp*Jmpp*100/(Voc*Jsc)
 
