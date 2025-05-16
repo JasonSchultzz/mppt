@@ -235,11 +235,15 @@ class MpptData:
             Jsc = np.interp(0, voltage, current_density)
             Jmpp = current_density[mpp_index]
             mpp_efficiency = efficiency[mpp_index]
+            Rseries = self.calculate_series_resistance(voltage, current_density)
+            Rshunt = self.calculate_shunt_resistance(voltage, current_density, Rseries)
 
             if i == 0:
                 direction = "Forward"
                 Voc = np.interp(0, current_density, voltage)
                 self.Vmpp = Vmpp
+                forward_efficiency = mpp_efficiency
+                hysteresis = None
                 if self.first:
                     initial_forward_voltage = voltage
                     initial_forward_current_density = current_density
@@ -263,6 +267,7 @@ class MpptData:
             elif i == 1:
                 direction = "Reverse"
                 Voc = np.interp(0, current_density[::-1], voltage[::-1])
+                reverse_efficiency = mpp_efficiency
                 if self.first:
                     initial_reverse_voltage = voltage
                     initial_reverse_current_density = current_density
@@ -281,6 +286,7 @@ class MpptData:
                     self.reverse_relative_efficiencies.append(relative_efficiency)
                     duration = (datetime.now() - initial_reverse_timestamp).seconds/60
                     self.reverse_durations.append(duration)
+                hysteresis = (forward_efficiency - reverse_efficiency)/reverse_efficiency * 100
 
             FF = Vmpp*Jmpp*100/(Voc*Jsc)
 
@@ -293,7 +299,10 @@ class MpptData:
                 "Vmpp (V)": [Vmpp],
                 "Jmpp (mA/cm2)": [Jmpp],
                 "Voc (V)": [Voc],
-                "Jsc (mA/cm2)": [Jsc]
+                "Jsc (mA/cm2)": [Jsc],
+                "Rseries (Ohm)": Rseries,
+                "Rshunt (Ohm)": Rshunt,
+                "Hysteresis Index": hysteresis
             })
             print(compiled_data)
             compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
@@ -313,6 +322,33 @@ class MpptData:
         else:
             self.recent_voltages = (recent_forward_voltage, recent_reverse_voltage)
             self.recent_current_densities = (recent_forward_current_density, recent_reverse_current_density)
+
+
+    def calculate_series_resistance(self, voltage, current) -> float:
+        pass
+        # Calculate from V = Voc
+        j_abs = np.abs(current)
+        index = np.argmin(j_abs)
+        x = voltage[index-10:index+10]
+        y = current[index-10:index+10]
+        m = self.determine_slope(x, y)
+        return -1/m
+
+
+    def calculate_shunt_resistance(self, voltage, current, Rseries) -> float:
+        pass
+        # Calculate from V = 0
+        v_abs = np.abs(voltage)
+        index = np.argmin(v_abs)
+        x = voltage[index-10:index+10]
+        y = current[index-10:index+10]
+        m = self.determine_slope(x, y)
+        return (-1/m - Rseries)
+
+
+    def determine_slope(self, x, y) -> float:
+        m, b = np.polyfit(x, y, 1)
+        return m
 
 
 class LivePlotter(QMainWindow):
