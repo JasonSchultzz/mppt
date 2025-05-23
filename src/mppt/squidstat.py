@@ -116,14 +116,6 @@ class MpptManager:
             self.handler.startUploadedExperiment(i)
 
 
-    def output_JV_data_to_csv(self, channel: int) -> float:
-        return self.channel_data[channel].format_results(
-            self.cell_area,
-            self.solar_irradiance,
-            self.path
-        )
-
-
     def experiment_started(self, channel: int) -> None:
         if self.channel_data[channel].state == JV_SWEEP_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep started")
@@ -135,21 +127,29 @@ class MpptManager:
 
 
     def experiment_finished(self, channel: int) -> None:
+        # JV Sweeps finished. Compile data and proceed to held MPP state if all other channels are also finished.
         if self.channel_data[channel].state == JV_SWEEP_STATE:
+            self.channel_data[channel].state = MPP_STATE
             self.channel_data[channel].store()
-            self.output_JV_data_to_csv(channel)
+            self.channel_data[channel].format_results(
+                self.cell_area,
+                self.solar_irradiance,
+                self.path
+            )
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(MPP_STATE):
                 self.window.update_plot_data(self.channel_data)
                 self.start_MPP()
 
+        # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
         elif self.channel_data[channel].state == MPP_STATE:
             self.channel_data[channel].state = JV_SWEEP_STATE
             print(f"Time: {datetime.now()}, Channel {channel}: MPP duration elapsed")
             if self.confirm_all_matching_states(JV_SWEEP_STATE):
                 self.start_JVsweep()
 
-        else:  # Dead state
+        # Dead state
+        else:  
             # Need to check that every other channel has reached dead state to quit
             # app.quit()
             pass
@@ -172,12 +172,24 @@ class MpptData:
         self.state = JV_SWEEP_STATE
 
         # Initial recorded values as tuples: (forward, reverse)
-        self.initial_voltages = (None, None)
-        self.initial_current_densities = (None, None)
-        self.recent_voltages = (None, None)
-        self.recent_current_densities = (None, None)
-        self.initial_timestamps = (None, None)
-        self.initial_efficiencies = (None, None)
+        self.initial_forward_voltage = None
+        self.initial_forward_current_density = None
+        self.initial_forward_time = None
+        self.initial_forward_pce = None
+
+        self.initial_reverse_voltage = None
+        self.initial_reverse_current_density = None
+        self.initial_reverse_time = None
+        self.initial_reverse_pce = None
+
+        self.recent_forward_voltage = None
+        self.recent_forward_current_density = None
+        self.recent_forward_pce = None
+
+        self.recent_reverse_voltage = None
+        self.recent_reverse_current_density = None
+        self.recent_reverse_pce = None
+        
         self.forward_relative_efficiencies = []
         self.reverse_relative_efficiencies = []
         self.forward_durations = []
@@ -216,112 +228,147 @@ class MpptData:
         if not os.path.exists(path):
             os.makedirs(path)
 
-        results = []
-        for (i, data) in enumerate(self.sweep_data_list):
-            voltage = np.array(data["Voltage (V)"])  # V
-            current_density = -1*np.array(data["Current (A)"])*1000/cell_area  # mA/cm2
-            power_density = voltage*current_density  # mW/cm2
-            efficiency = power_density*100/solar_irradiance
-            results.append(pd.DataFrame({
+        # List should contain a forwards and reverse set of data
+        if len(self.sweep_data_list) != 2:
+            print(f"Time: {datetime.now()}, Channel {self.name}: Recording of forward or reverse JV sweep failed.")
+            return
+        
+        forward_data = self.compile_sweep_data(self.sweep_data_list[0], cell_area, solar_irradiance)
+        reverse_data = self.compile_sweep_data(self.sweep_data_list[1], cell_area, solar_irradiance)
+        forward_data.to_csv(f"{path}/forward_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/forward_sweep_data.csv"))
+        reverse_data.to_csv(f"{path}/reverse_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_sweep_data.csv"))
+
+        compiled_data = {
+                "Duration (min)": [],
+                "Direction": [],
+                "Normalized PCE": [],
+                "PCE (%)": [],
+                "FF (%)": [],
+                "Vmpp (V)": [],
+                "Jmpp (mA/cm2)": [],
+                "Voc (V)": [],
+                "Jsc (mA/cm2)": [],
+                "Rseries (Ohm)": [],
+                "Rshunt (Ohm)": [],
+                "Hysteresis Index": []
+            }
+        compiled_data = self.compile_data(compiled_data, forward_data, "Forward")
+        compiled_data = self.compile_data(compiled_data, reverse_data, "Reverse")
+        compiled_data = pd.DataFrame(compiled_data)
+        compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
+
+        self.sweep_data_list = []
+        if self.first:
+            self.first = False
+
+
+    def compile_sweep_data(self, data: pd.DataFrame, cell_area: float, solar_irradiance: float) -> pd.DataFrame:
+        voltage = np.array(data["Voltage (V)"])  # V
+        current_density = np.array(data["Current (A)"])*1000/cell_area  # mA/cm2
+        power_density = voltage*current_density  # mW/cm2
+        efficiency = power_density*100/solar_irradiance
+        return pd.DataFrame({
                 "Timestamp": data["Timestamp"],
                 "Voltage (V)": voltage,
                 "Current Density (mA/cm2)": current_density,
                 "Power Density (mW/cm2)": power_density,
                 "PCE (%)": efficiency
-            }))
+        })
 
-            mpp_index = np.argmax(power_density)
-            Vmpp = voltage[mpp_index]
-            Jsc = np.interp(0, voltage, current_density)
-            Jmpp = current_density[mpp_index]
-            mpp_efficiency = efficiency[mpp_index]
-            Rseries = self.calculate_series_resistance(voltage, current_density)
-            Rshunt = self.calculate_shunt_resistance(voltage, current_density, Rseries)
 
-            if i == 0:
-                direction = "Forward"
-                Voc = np.interp(0, current_density, voltage)
-                self.Vmpp = Vmpp
-                forward_efficiency = mpp_efficiency
-                hysteresis = None
-                if self.first:
-                    initial_forward_voltage = voltage
-                    initial_forward_current_density = current_density
-                    relative_efficiency = 1
-                    self.forward_relative_efficiencies.append(relative_efficiency)
-                    initial_forward_timestamp = datetime.now()
-                    duration = 0
-                    self.forward_durations.append(duration)
-                    initial_forward_efficiency = mpp_efficiency
-                else:
-                    recent_forward_voltage = voltage
-                    recent_forward_current_density = current_density
-                    initial_forward_timestamp, _ = self.initial_timestamps
-                    initial_forward_efficiency, _ = self.initial_efficiencies
-                    relative_efficiency = mpp_efficiency/initial_forward_efficiency
-                    self.forward_relative_efficiencies.append(relative_efficiency)
-                    duration = (datetime.now() - initial_forward_timestamp).seconds/60
-                    self.forward_durations.append(duration)
-                    
+    def compile_data(
+            self,
+            data: dict,
+            sweep_data: pd.DataFrame,
+            scan_direction: str,
+    ) -> dict:
+        
+        mpp_index = np.argmin(sweep_data["Power Density (mW/cm2)"])
+        voltage = sweep_data["Voltage (V)"]
+        current_density = sweep_data["Current Density (mA/cm2)"]
+        efficiency = sweep_data["PCE (%)"]
+        Vmpp = voltage[mpp_index]
+        Rseries = self.calculate_series_resistance(voltage, current_density)
+        print(f"Rseries = {Rseries}")
+        Rshunt = self.calculate_shunt_resistance(voltage, current_density, Rseries)
+        print(f"Rshunt = {Rshunt}")
+        Jmpp = current_density[mpp_index]
+        Jsc = np.interp(0, voltage, current_density)
 
-            elif i == 1:
-                direction = "Reverse"
-                Voc = np.interp(0, current_density[::-1], voltage[::-1])
-                reverse_efficiency = mpp_efficiency
-                if self.first:
-                    initial_reverse_voltage = voltage
-                    initial_reverse_current_density = current_density
-                    relative_efficiency = 1
-                    self.reverse_relative_efficiencies.append(relative_efficiency)
-                    initial_reverse_timestamp = datetime.now()
-                    duration = 0
-                    self.reverse_durations.append(duration)
-                    initial_reverse_efficiency = mpp_efficiency
-                else:
-                    recent_reverse_voltage = voltage
-                    recent_reverse_current_density = current_density
-                    _, initial_reverse_timestamp = self.initial_timestamps
-                    _, initial_reverse_efficiency = self.initial_efficiencies
-                    relative_efficiency = mpp_efficiency/initial_reverse_efficiency
-                    self.reverse_relative_efficiencies.append(relative_efficiency)
-                    duration = (datetime.now() - initial_reverse_timestamp).seconds/60
-                    self.reverse_durations.append(duration)
-                hysteresis = (reverse_efficiency - forward_efficiency)/reverse_efficiency
+        if scan_direction == "Forward":
+            self.Vmpp = Vmpp  # Set MPP for forward scan. TODO: FIX THIS AT SOME POINT
+            hysteresis_index = None
+            Voc = np.interp(0, current_density, voltage)
 
-            FF = Vmpp*Jmpp*100/(Voc*Jsc)
+            if self.first:
+                duration = 0
+                relative_efficiency = 1
 
-            compiled_data = pd.DataFrame({
-                "Duration": [duration],
-                "Direction": [direction],
-                "Normalized PCE": [relative_efficiency],
-                "PCE (%)": [mpp_efficiency],
-                "FF (%)": [FF],
-                "Vmpp (V)": [Vmpp],
-                "Jmpp (mA/cm2)": [Jmpp],
-                "Voc (V)": [Voc],
-                "Jsc (mA/cm2)": [Jsc],
-                "Rseries (Ohm)": [Rseries],
-                "Rshunt (Ohm)": [Rshunt],
-                "Hysteresis Index": [hysteresis]
-            })
-            print(compiled_data)
-            compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
+                # Storing intial results for JV plots and future calculations
+                self.initial_forward_voltage = voltage
+                self.initial_forward_current_density = current_density
+                self.initial_forward_time = datetime.now()
+                self.initial_forward_pce = efficiency[mpp_index]
+            else:
+                duration = (datetime.now() - self.initial_forward_time).seconds/60
+                relative_efficiency = efficiency[mpp_index]/self.initial_forward_pce
 
-        results[0].to_csv(f"{path}/forward_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/forward_sweep_data.csv"))
-        results[1].to_csv(f"{path}/reverse_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_sweep_data.csv"))
+                # Storing most recent JV results for plotting
+                self.recent_forward_voltage = voltage
+                self.recent_forward_current_density = current_density
+                self.recent_forward_pce = efficiency[mpp_index]
 
-        self.state = MPP_STATE
-        self.sweep_data_list = []
+            # Appending duration and normalized PCE to list for MPPT plotting
+            self.forward_durations.append(duration)
+            self.forward_relative_efficiencies.append(relative_efficiency)
 
-        if self.first:
-            self.initial_voltages = (initial_forward_voltage, initial_reverse_voltage)
-            self.initial_current_densities = (initial_forward_current_density, initial_reverse_current_density)
-            self.initial_timestamps = (initial_forward_timestamp, initial_reverse_timestamp)
-            self.initial_efficiencies = (initial_forward_efficiency, initial_reverse_efficiency)
-            self.first = False
+        elif scan_direction == "Reverse":
+            Voc = np.interp(0, current_density[::-1], voltage[::-1])
+
+            if self.first:
+                duration = 0
+                relative_efficiency = 1
+
+                # Storing intial results for JV plots and future calculations
+                self.initial_reverse_voltage = voltage
+                self.initial_reverse_current_density = current_density
+                self.initial_reverse_time = datetime.now()
+                self.initial_reverse_pce = efficiency[mpp_index]
+
+                hysteresis_index = (self.initial_reverse_pce - self.initial_forward_pce)/self.initial_reverse_pce
+            else:
+                duration = (datetime.now() - self.initial_reverse_time).seconds/60
+                relative_efficiency = efficiency[mpp_index]/self.initial_reverse_pce
+
+                # Storing most recent JV results for plotting
+                self.recent_reverse_voltage = voltage
+                self.recent_reverse_current_density = current_density
+                self.recent_reverse_pce = efficiency[mpp_index]
+
+                hysteresis_index = (self.recent_reverse_pce - self.recent_forward_pce)/self.recent_reverse_pce
+
+            # Appending duration and normalized PCE to list for MPPT plotting
+            self.reverse_durations.append(duration)
+            self.reverse_relative_efficiencies.append(relative_efficiency) 
+
         else:
-            self.recent_voltages = (recent_forward_voltage, recent_reverse_voltage)
-            self.recent_current_densities = (recent_forward_current_density, recent_reverse_current_density)
+            raise ValueError(f"{scan_direction} is an incorrect direction entry for compiling JV data.")
+        
+        FF = Vmpp*Jmpp*100/(Voc*Jsc)
+        print(type(data))
+        data["Direction"].append(scan_direction)
+        data["Duration (min)"].append(duration)
+        data["Normalized PCE"].append(relative_efficiency)
+        data["PCE (%)"].append(efficiency[mpp_index])
+        data["FF (%)"].append(FF)
+        data["Vmpp (V)"].append(Vmpp)
+        data["Jmpp (mA/cm2)"] = Jmpp
+        data["Voc (V)"].append(Voc)
+        data["Jsc (mA/cm2)"].append(Jsc)
+        data["Rseries (Ohm)"].append(Rseries)
+        data["Rshunt (Ohm)"].append(Rshunt)
+        data["Hysteresis Index"].append(hysteresis_index)
+        return data
 
 
     def calculate_series_resistance(self, voltage, current) -> float:
@@ -331,6 +378,8 @@ class MpptData:
         index = np.argmin(j_abs)
         x = voltage[index-10:index+10]
         y = current[index-10:index+10]
+        print("Series")
+        print(x)
         m = self.determine_slope(x, y)
         return -1/m
 
@@ -338,10 +387,16 @@ class MpptData:
     def calculate_shunt_resistance(self, voltage, current, Rseries) -> float:
         pass
         # Calculate from V = 0
+        print(voltage)
         v_abs = np.abs(voltage)
+        print("v_abs")
+        print(v_abs)
         index = np.argmin(v_abs)
+        print(index)
         x = voltage[index-10:index+10]
         y = current[index-10:index+10]
+        print("Shunt")
+        print(x)
         m = self.determine_slope(x, y)
         return (-1/m - Rseries)
 
@@ -415,17 +470,20 @@ class LivePlotter(QMainWindow):
         for i, data in enumerate(channel_data):
             ax = self.axes[i]
             ax.clear()  # Clear the old plot
-            forward_voltage, reverse_voltage = data.initial_voltages
-            forward_current_density, reverse_current_density = data.initial_current_densities
+            forward_voltage = data.initial_forward_voltage
+            reverse_voltage = data.initial_reverse_voltage
+            forward_current_density = data.initial_forward_current_density
+            reverse_current_density = data.initial_reverse_current_density
 
             # Plot the initial JV sweep
             ax.plot(forward_voltage, forward_current_density, color = 'b', label = "Initial Forward")
             ax.plot(reverse_voltage, reverse_current_density, color = 'r', label = "Initial Reverse")
 
-            if (all(x is not None for x in data.recent_voltages)) and (all(y is not None for y in data.recent_current_densities)):
-                forward_voltage, reverse_voltage = data.recent_voltages
-                forward_current_density, reverse_current_density = data.recent_current_densities
-
+            forward_voltage = data.recent_forward_voltage
+            reverse_voltage = data.recent_reverse_voltage
+            forward_current_density = data.recent_forward_current_density
+            reverse_current_density = data.recent_reverse_current_density
+            if forward_voltage is not None and reverse_voltage is not None and forward_current_density is not None and reverse_current_density is not None:
                 # Plot the latest JV sweep
                 ax.plot(forward_voltage, forward_current_density, ls = ":", color = 'b', label = "Recent Forward")
                 ax.plot(reverse_voltage, reverse_current_density, ls = ":", color = 'r', label = "Recent Reverse")
