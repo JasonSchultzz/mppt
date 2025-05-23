@@ -371,6 +371,10 @@ class MpptData:
         return data
 
 
+    # NOTE: Resistance calculations currently rely on grabbing a range of values around
+    #       the minimum point in an absolute value array (for Voc and Jsc).
+    #       This produces an error on dead cells that produce roughly a linear curve
+    #       since it cannot handle grabbing a range due to out of bounds.
     def calculate_series_resistance(self, voltage, current) -> float:
         pass
         # Calculate from V = Voc
