@@ -1,24 +1,12 @@
 import sys
 import os
-import struct
 import numpy as np
 import pandas as pd
 from datetime import datetime
-from PySide6.QtCore import QIODevice, QDataStream, QByteArray, QThread, QObject, Signal
-from PySide6.QtSerialPort import QSerialPort, QSerialPortInfo
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QGridLayout
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from SquidstatPyLibrary import AisDeviceTracker
-from SquidstatPyLibrary import AisCompRange
-from SquidstatPyLibrary import AisDCData
-from SquidstatPyLibrary import AisACData
-from SquidstatPyLibrary import AisExperimentNode
-from SquidstatPyLibrary import AisErrorCode
-from SquidstatPyLibrary import AisExperiment
-from SquidstatPyLibrary import AisInstrumentHandler
-from SquidstatPyLibrary import AisSteppedVoltageElement
-from SquidstatPyLibrary import AisConstantPotElement
+from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement
 
 JV_SWEEP_STATE = 0
 MPP_STATE = 1
@@ -252,8 +240,8 @@ class MpptData:
                 "Rshunt (Ohm)": [],
                 "Hysteresis Index": []
             }
-        compiled_data = self.compile_data(compiled_data, forward_data, "Forward")
-        compiled_data = self.compile_data(compiled_data, reverse_data, "Reverse")
+        compiled_data = self.compile_data(compiled_data, forward_data, "Forward", cell_area)
+        compiled_data = self.compile_data(compiled_data, reverse_data, "Reverse", cell_area)
         compiled_data = pd.DataFrame(compiled_data)
         compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
 
@@ -281,17 +269,17 @@ class MpptData:
             data: dict,
             sweep_data: pd.DataFrame,
             scan_direction: str,
+            cell_area: float
     ) -> dict:
         
         mpp_index = np.argmin(sweep_data["Power Density (mW/cm2)"])
         voltage = sweep_data["Voltage (V)"]
         current_density = sweep_data["Current Density (mA/cm2)"]
+        current = current_density*cell_area/1000  # convert back to Amps
         efficiency = sweep_data["PCE (%)"]
         Vmpp = voltage[mpp_index]
-        Rseries = self.calculate_series_resistance(voltage, current_density)
-        print(f"Rseries = {Rseries}")
-        Rshunt = self.calculate_shunt_resistance(voltage, current_density, Rseries)
-        print(f"Rshunt = {Rshunt}")
+        Rseries = self.calculate_series_resistance(voltage, current)
+        Rshunt = self.calculate_shunt_resistance(voltage, current, Rseries)
         Jmpp = current_density[mpp_index]
         Jsc = np.interp(0, voltage, current_density)
 
@@ -355,7 +343,6 @@ class MpptData:
             raise ValueError(f"{scan_direction} is an incorrect direction entry for compiling JV data.")
         
         FF = Vmpp*Jmpp*100/(Voc*Jsc)
-        print(type(data))
         data["Direction"].append(scan_direction)
         data["Duration (min)"].append(duration)
         data["Normalized PCE"].append(relative_efficiency)
@@ -376,31 +363,21 @@ class MpptData:
     #       This produces an error on dead cells that produce roughly a linear curve
     #       since it cannot handle grabbing a range due to out of bounds.
     def calculate_series_resistance(self, voltage, current) -> float:
-        pass
         # Calculate from V = Voc
         j_abs = np.abs(current)
         index = np.argmin(j_abs)
         x = voltage[index-10:index+10]
         y = current[index-10:index+10]
-        print("Series")
-        print(x)
         m = self.determine_slope(x, y)
         return -1/m
 
 
     def calculate_shunt_resistance(self, voltage, current, Rseries) -> float:
-        pass
         # Calculate from V = 0
-        print(voltage)
         v_abs = np.abs(voltage)
-        print("v_abs")
-        print(v_abs)
         index = np.argmin(v_abs)
-        print(index)
         x = voltage[index-10:index+10]
         y = current[index-10:index+10]
-        print("Shunt")
-        print(x)
         m = self.determine_slope(x, y)
         return (-1/m - Rseries)
 
