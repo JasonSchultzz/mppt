@@ -132,6 +132,11 @@ class MpptManager:
         # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
         elif self.channel_data[channel].state == MPP_STATE:
             self.channel_data[channel].state = JV_SWEEP_STATE
+            self.channel_data[channel].format_mpp_results(
+                self.cell_area,
+                self.solar_irradiance,
+                self.path
+            )
             print(f"Time: {datetime.now()}, Channel {channel}: MPP duration elapsed")
             if self.confirm_all_matching_states(JV_SWEEP_STATE):
                 self.start_JVsweep()
@@ -159,7 +164,6 @@ class MpptData:
         self.name = name
         self.state = JV_SWEEP_STATE
 
-        # Initial recorded values as tuples: (forward, reverse)
         self.initial_forward_voltage = None
         self.initial_forward_current_density = None
         self.initial_forward_time = None
@@ -208,7 +212,8 @@ class MpptData:
 
 
     def format_results(
-            self, cell_area: float,
+            self,
+            cell_area: float,
             solar_irradiance: float,
             directory: str
     ) -> None:
@@ -385,6 +390,35 @@ class MpptData:
     def determine_slope(self, x, y) -> float:
         m, b = np.polyfit(x, y, 1)
         return m
+    
+
+    def format_mpp_results(
+            self,
+            cell_area: float,
+            solar_irradiance: float,
+            directory: str
+    ) -> None:
+        if not self.voltage or not self.current:
+            return
+        
+        voltage = np.array(self.voltage)
+        current_density = np.array(self.current)*1000/cell_area  # mA/cm2
+        power_density = voltage*current_density
+        efficiency = power_density*100/solar_irradiance
+        path = f"{directory}/{self.name}"
+
+        compiled_data = pd.DataFrame({
+            "Timestamp": self.timestamp,
+            "Voltage (V)": self.voltage,
+            "Current Density (mA/cm2)": current_density,
+            "Power Density (mW/cm2)": power_density,
+            "PCE (%)": efficiency
+        })
+        compiled_data.to_csv(f"{path}/mpp_data.csv", mode = "a", header = not os.path.exists(f"{path}/mpp_data.csv"))
+
+        self.timestamp = []
+        self.voltage = []
+        self.current = []
 
 
 class LivePlotter(QMainWindow):
