@@ -34,13 +34,18 @@ class MpptManager:
         self.tracker.connectToDeviceOnComPort(port)
         self.handler = self.tracker.getInstrumentHandler(device_name)
 
+        # What occurs when a new expierment is started
         self.handler.experimentNewElementStarting.connect(lambda channel, data: self.experiment_started(channel))
+        
+        # What happens when data is recorded
         self.handler.activeDCDataReady.connect(
-            lambda channel, data: self.channel_data[channel].append_JV_sweep_data(
+            lambda channel, data: self.channel_data[channel].append_data(
                                         data.workingElectrodeVoltage,
                                         data.current
                                     )
         )
+
+        # What happens when an experiment is finished
         self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
 
 
@@ -192,11 +197,10 @@ class MpptData:
         self.first: bool = True
 
 
-    def append_JV_sweep_data(self, voltage: float, current: float):
-        if self.state == JV_SWEEP_STATE:
-            self.voltage.append(voltage)
-            self.current.append(current)
-            self.timestamp.append(datetime.now())
+    def append_data(self, voltage: float, current: float):
+        self.voltage.append(voltage)
+        self.current.append(current)
+        self.timestamp.append(datetime.now())
     
 
     def store(self) -> None:
@@ -394,6 +398,8 @@ class MpptData:
     #       the minimum point in an absolute value array (for Voc and Jsc).
     #       This produces an error on dead cells that produce roughly a linear curve
     #       since it cannot handle grabbing a range due to out of bounds.
+    #       This is currently handled by catching an exception on calculating the resistance
+    #       A thrown exception will result in a value of NaN
     def calculate_series_resistance(self, voltage, current) -> float:
         # Calculate from V = Voc
         j_abs = np.abs(current)
@@ -450,7 +456,6 @@ class MpptData:
         # except FileNotFoundError:
         #     with pd.ExcelWriter(filename, mode = "w") as writer:
         #         compiled_data.to_excel(writer, sheet_name = "MPPT")
-
 
         self.timestamp = []
         self.voltage = []
