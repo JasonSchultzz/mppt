@@ -54,7 +54,7 @@ class MpptManager:
             cell_area: float,
             solar_irradiance: float,
             constant_voltage_duration: float,
-            constant_voltage_sampling_interval: float = 10
+            constant_voltage_sampling_interval: float = 10,
     ) -> None:
         self.cell_area = cell_area
         self.solar_irradiance = solar_irradiance
@@ -122,7 +122,8 @@ class MpptManager:
             self.channel_data[channel].format_results(
                 self.cell_area,
                 self.solar_irradiance,
-                self.path
+                self.path,
+                self.ignore_resistance
             )
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(MPP_STATE):
@@ -215,7 +216,7 @@ class MpptData:
             self,
             cell_area: float,
             solar_irradiance: float,
-            directory: str
+            directory: str,
     ) -> None:
         path = f"{directory}/{self.name}"
         if not os.path.exists(path):
@@ -250,7 +251,9 @@ class MpptData:
         compiled_data = pd.DataFrame(compiled_data)
         compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
 
-        filename = f"{path}/data.xlsx"
+        # NOTE: Outputing data in a single xlsx spreadsheet causes issues when trying to append to
+        # specific sheets
+        # filename = f"{path}/data.xlsx"
         # try:
         #     with pd.ExcelWriter(filename, mode = "a") as writer:
         #         compiled_data.to_excel(writer, sheet_name = "Compiled JV Results")
@@ -286,7 +289,7 @@ class MpptData:
             data: dict,
             sweep_data: pd.DataFrame,
             scan_direction: str,
-            cell_area: float
+            cell_area: float,
     ) -> dict:
         
         mpp_index = np.argmin(sweep_data["Power Density (mW/cm2)"])
@@ -295,8 +298,20 @@ class MpptData:
         current = current_density*cell_area/1000  # convert back to Amps
         efficiency = sweep_data["PCE (%)"]
         Vmpp = voltage[mpp_index]
-        #Rseries = self.calculate_series_resistance(voltage, current)
-        #Rshunt = self.calculate_shunt_resistance(voltage, current, Rseries)
+
+        try:
+            Rseries = self.calculate_series_resistance(voltage, current)
+        except Exception as e:
+            print(f"ERROR: {e}\nExcluding resistances calculations")
+            Rseries = np.nan
+            Rshunt = np.nan
+        finally:
+            try:
+                Rshunt = self.calculate_shunt_resistance(voltage, current, Rseries)
+            except Exception as e:
+                print(f"ERROR: {e}\nExcluding shunt resistances calculation")
+                Rshunt = np.nan
+        
         Jmpp = current_density[mpp_index]
         Jsc = np.interp(0, voltage, current_density)
 
@@ -369,8 +384,8 @@ class MpptData:
         data["Jmpp (mA/cm2)"] = Jmpp
         data["Voc (V)"].append(Voc)
         data["Jsc (mA/cm2)"].append(Jsc)
-        data["Rseries (Ohm)"].append(np.nan)
-        data["Rshunt (Ohm)"].append(np.nan)
+        data["Rseries (Ohm)"].append(Rseries)
+        data["Rshunt (Ohm)"].append(Rshunt)
         data["Hysteresis Index"].append(hysteresis_index)
         return data
 
@@ -528,7 +543,7 @@ class LivePlotter(QMainWindow):
             ax.set_xlabel("Voltage (V)")
             ax.set_ylabel("Current Density ($mA/cm^{2}$)")
             ax.set_title(f"Channel {i+1} JV Data")
-            ax.set_ylim(0)
+            ax.set_ylim((None, 0))  # View of Quadrant 4
             ax.legend()
 
             # Update MPPT plot
