@@ -250,6 +250,12 @@ class MpptData:
         compiled_data = pd.DataFrame(compiled_data)
         compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
 
+        filename = f"{path}/data.xlsx"
+        with pd.ExcelWriter(filename, mode = "a") as writer:
+            compiled_data.to_excel(writer, sheet_name = "Compiled JV Results")
+            forward_data.to_excel(writer, sheet_name = "Forward Scan")
+            reverse_data.to_excel(writer, sheet_name = "Reverse Scan")
+
         self.sweep_data_list = []
         if self.first:
             self.first = False
@@ -415,6 +421,10 @@ class MpptData:
             "PCE (%)": efficiency
         })
         compiled_data.to_csv(f"{path}/mpp_data.csv", mode = "a", header = not os.path.exists(f"{path}/mpp_data.csv"))
+
+        filename = f"{path}/data.xlsx"
+        with pd.ExcelWriter(filename, mode = "a") as writer:
+            compiled_data.to_excel(writer, sheet_name = "MPPT")
 
         self.timestamp = []
         self.voltage = []
