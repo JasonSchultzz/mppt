@@ -251,10 +251,16 @@ class MpptData:
         compiled_data.to_csv(f"{path}/compiled_data.csv", mode = "a", header = not os.path.exists(f"{path}/compiled_data.csv"))
 
         filename = f"{path}/data.xlsx"
-        with pd.ExcelWriter(filename, mode = "a") as writer:
-            compiled_data.to_excel(writer, sheet_name = "Compiled JV Results")
-            forward_data.to_excel(writer, sheet_name = "Forward Scan")
-            reverse_data.to_excel(writer, sheet_name = "Reverse Scan")
+        # try:
+        #     with pd.ExcelWriter(filename, mode = "a") as writer:
+        #         compiled_data.to_excel(writer, sheet_name = "Compiled JV Results")
+        #         forward_data.to_excel(writer, sheet_name = "Forward Scan")
+        #         reverse_data.to_excel(writer, sheet_name = "Reverse Scan")
+        # except FileNotFoundError:
+        #     with pd.ExcelWriter(filename, mode = "w") as writer:
+        #         compiled_data.to_excel(writer, sheet_name = "Compiled JV Results")
+        #         forward_data.to_excel(writer, sheet_name = "Forward Scan")
+        #         reverse_data.to_excel(writer, sheet_name = "Reverse Scan")
 
         self.sweep_data_list = []
         if self.first:
@@ -289,8 +295,8 @@ class MpptData:
         current = current_density*cell_area/1000  # convert back to Amps
         efficiency = sweep_data["PCE (%)"]
         Vmpp = voltage[mpp_index]
-        Rseries = self.calculate_series_resistance(voltage, current)
-        Rshunt = self.calculate_shunt_resistance(voltage, current, Rseries)
+        #Rseries = self.calculate_series_resistance(voltage, current)
+        #Rshunt = self.calculate_shunt_resistance(voltage, current, Rseries)
         Jmpp = current_density[mpp_index]
         Jsc = np.interp(0, voltage, current_density)
 
@@ -363,8 +369,8 @@ class MpptData:
         data["Jmpp (mA/cm2)"] = Jmpp
         data["Voc (V)"].append(Voc)
         data["Jsc (mA/cm2)"].append(Jsc)
-        data["Rseries (Ohm)"].append(Rseries)
-        data["Rshunt (Ohm)"].append(Rshunt)
+        data["Rseries (Ohm)"].append(np.nan)
+        data["Rshunt (Ohm)"].append(np.nan)
         data["Hysteresis Index"].append(hysteresis_index)
         return data
 
@@ -422,9 +428,14 @@ class MpptData:
         })
         compiled_data.to_csv(f"{path}/mpp_data.csv", mode = "a", header = not os.path.exists(f"{path}/mpp_data.csv"))
 
-        filename = f"{path}/data.xlsx"
-        with pd.ExcelWriter(filename, mode = "a") as writer:
-            compiled_data.to_excel(writer, sheet_name = "MPPT")
+        # filename = f"{path}/data.xlsx"
+        # try:
+        #     with pd.ExcelWriter(filename, mode = "a",) as writer:
+        #         compiled_data.to_excel(writer, sheet_name = "MPPT")
+        # except FileNotFoundError:
+        #     with pd.ExcelWriter(filename, mode = "w") as writer:
+        #         compiled_data.to_excel(writer, sheet_name = "MPPT")
+
 
         self.timestamp = []
         self.voltage = []
