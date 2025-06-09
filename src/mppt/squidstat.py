@@ -41,7 +41,8 @@ class MpptManager:
         self.handler.activeDCDataReady.connect(
             lambda channel, data: self.channel_data[channel].append_data(
                                         data.workingElectrodeVoltage,
-                                        data.current
+                                        data.current,
+                                        datetime.now()
                                     )
         )
 
@@ -197,10 +198,10 @@ class MpptData:
         self.first: bool = True
 
 
-    def append_data(self, voltage: float, current: float):
+    def append_data(self, voltage: float, current: float, timestamp: datetime):
         self.voltage.append(voltage)
         self.current.append(current)
-        self.timestamp.append(datetime.now())
+        self.timestamp.append(timestamp)
     
 
     def store(self) -> None:
