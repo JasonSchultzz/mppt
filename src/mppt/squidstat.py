@@ -54,34 +54,36 @@ class MpptManager:
             self,
             low_voltage: float,
             high_voltage: float,
-            sweep_data_points: int,
-            step_time: float,
-            scan_time: float,
+            step_voltage: float,
+            scan_speed: float,
+            jv_sample_rate_modifier: float,
+            mpp_duration: float,
+            mpp_sample_interval: float,
             cell_area: float,
-            solar_irradiance: float,
-            constant_voltage_duration: float,
-            constant_voltage_sampling_interval: float = 10,
+            solar_irradiance: float
     ) -> None:
         self.cell_area = cell_area
         self.solar_irradiance = solar_irradiance
-        step_voltage = (high_voltage - low_voltage)/sweep_data_points
-        self.constant_voltage_duration = constant_voltage_duration
-        self.constant_voltage_sampling_interval = constant_voltage_sampling_interval
+        self.mpp_duration = mpp_duration
+        self.mpp_sample_interval = mpp_sample_interval
+        step_time = step_voltage/scan_speed
+        sample_interval = step_time*jv_sample_rate_modifier
+        step_voltage_in_volts = step_voltage/1000
 
         self.experiment = AisExperiment()
         self.forwardJVSweep = AisSteppedVoltageElement(
             low_voltage,
             high_voltage,
-            step_voltage,
+            step_voltage_in_volts,
             step_time,
-            scan_time
+            sample_interval
         )
         self.reverseJVSweep = AisSteppedVoltageElement(
             high_voltage,
             low_voltage,
-            step_voltage,
+            step_voltage_in_volts,
             step_time,
-            scan_time
+            sample_interval
         )
         
         self.experiment.appendElement(self.forwardJVSweep)
@@ -101,8 +103,8 @@ class MpptManager:
         for (i, channel) in enumerate(self.channel_data):
             constant_potential = AisConstantPotElement(
                 channel.Vmpp,
-                self.constant_voltage_sampling_interval,
-                self.constant_voltage_duration
+                self.mpp_sample_interval,
+                self.mpp_duration
             )
             constant_potential_experiment = AisExperiment()
             constant_potential_experiment.appendElement(constant_potential)
@@ -129,7 +131,6 @@ class MpptManager:
                 self.cell_area,
                 self.solar_irradiance,
                 self.path,
-                self.ignore_resistance
             )
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(MPP_STATE):
@@ -564,34 +565,3 @@ class LivePlotter(QMainWindow):
         # Refresh the canvas to reflect the changes
         for canvas_item in self.canvas:
             canvas_item.draw()
-
-
-def main():
-    app = QApplication()
-    manager = MpptManager(
-        path = "./output",
-        port = "COM4",
-        device_name = "Prime2809",
-        channel_names = [
-            "2025-04-08-Si1",
-            "2025-04-08-Si2",
-            "2025-04-08-Si3",
-            "2025-04-08-Si4",
-            ]
-    )
-    manager.set_mppt_testing_parameters(
-        low_voltage = 0,     # V
-        high_voltage = 0.6,     # V
-        sweep_data_points = 100,
-        step_time = 0.08,       # s
-        scan_time = 0.06,       # s
-        cell_area = 6,       # cm2
-        solar_irradiance = 25,  # mW/cm2,
-        constant_voltage_duration = 30  # s
-    )
-    manager.start_JVsweep()
-
-    sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()
