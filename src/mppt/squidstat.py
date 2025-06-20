@@ -550,7 +550,7 @@ class LivePlotter(QMainWindow):
             ax.set_xlabel("Voltage (V)")
             ax.set_ylabel("Current Density ($mA/cm^{2}$)")
             ax.set_title(f"Channel {i+1} JV Data")
-            ax.set_ylim((None, 0))  # View of Quadrant 4
+            # ax.set_ylim((None, 0))  # View of Quadrant 4
             ax.legend()
 
             # Update MPPT plot
