@@ -247,9 +247,9 @@ class SquidPlotter(QMainWindow):
             # ax.set_ylim((None, 0))  # View of Quadrant 4
             ax.legend()
 
-            # Update MPPT plot
-            self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, color = mppt_channel_colors[i], label = f"Forward {i+1}")
-            self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, color = mppt_channel_colors[i], ls = ":", label = f"Reverse {i+1}")
+        # Update MPPT plot
+        self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, color = mppt_channel_colors[i], label = f"Forward {i+1}")
+        self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, color = mppt_channel_colors[i], ls = ":", label = f"Reverse {i+1}")
         
         self.axes[4].set_xlabel("Duration")
         self.axes[4].set_ylabel("Normalized PCE")
