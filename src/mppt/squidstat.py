@@ -1,6 +1,6 @@
 import numpy as np
 from datetime import datetime
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QGridLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QGridLayout
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement
@@ -20,7 +20,7 @@ class SquidstatMppt:
         for channel_name in channel_names:
             self.channel_data.append(MpptData(channel_name))
 
-        self.window = LivePlotter()
+        self.window = SquidPlotter()
         self.window.show()
 
         self.path = path
@@ -158,7 +158,7 @@ class SquidstatMppt:
         return True
         
 
-class LivePlotter(QMainWindow):
+class SquidPlotter(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Live Plot Updates")
