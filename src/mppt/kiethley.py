@@ -10,162 +10,195 @@
 
 from pymeasure.instruments.keithley import Keithley2400
 import numpy as np
-from numpy import ndarray
-import pandas as pd
 from time import sleep
-import matplotlib.pyplot as plt
-import os
 from datetime import datetime
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QGridLayout
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, FORWARD_SCAN, REVERSE_SCAN, MpptData
+
+GPIB = "GPIB::24"
 
 
-def JV_sweep(
-        keithley: Keithley2400,
-        voltage_start: float,
-        voltage_end: float,
-        data_points: int,
-        sweep_time: float,
-        area: float,
-        averages: int = 5
-) -> dict:
-    voltage = np.linspace(voltage_start, voltage_end, data_points)
-    current = np.zeros_like(voltage)
+class KeithleyMppt:
+    def __init__(
+            self,
+            path: str,
+            GPIB: str,
+            cell_name: str,
+    ) -> None:
+        self.path = path
+        self.cell = MpptData(cell_name)
+        self.keithley = Keithley2400(GPIB)
 
-    for (i, v) in enumerate(voltage):
-        keithley.config_buffer(averages)
-        keithley.source_voltage = v
+
+    def set_voltage_on_keithley(self, voltage: float, keithley: Keithley2400) -> None:
+        if not self.keithley.open():
+            print("ERROR: Please open Keithley ")
+            return
+        
+        keithley.config_buffer(self.averages)
+        keithley.source_voltage = voltage
+        sleep(self.step_time)
         keithley.start_buffer()
         keithley.wait_for_buffer()
-        current[i] = keithley.mean_current
-        sleep(sweep_time)
-
-    resistance = voltage/current
-    current_density = current*1000/area
-    power_density = voltage*current_density
-    data = {
-        "Voltage (V)": voltage,
-        "Current Density (mA/cm2)": current_density,
-        "Power Density (mW/cm2)": power_density,
-        "Resistance (Ohms)": resistance
-    }
-    return data
 
 
-def determine_cell_parameters(
-        voltage: ndarray,
-        current_density: ndarray,
-        power_density: ndarray,
-        solar_power: float,
-        direction: str
-) -> pd.DataFrame:
-    Jsc = np.interp(0, voltage, current_density)
-    Voc = np.interp(0, current_density, voltage)
-    print(Jsc)
-    print(Voc)
-    mpp_index = np.argmin(power_density)
-    Vmpp = voltage[mpp_index]
-    Jmpp = current_density[mpp_index]
-    efficiency = power_density[mpp_index]*100/solar_power
-    FF = Vmpp*Jmpp/(Voc*Jsc)
-    t = datetime.now()
-    print(Vmpp)
-    print(Jmpp)
-    print(efficiency)
-    print(FF)
-
-    data = pd.DataFrame({
-        "Time": [t],
-        "Direction": direction,
-        "Efficiency (%)": [efficiency],
-        "Fill Factor": [FF],
-        "Vmpp (V)": [Vmpp],
-        "Jmpp (mA/cm2)": [Jmpp],
-        "Voc (V)": [Voc],
-        "Jsc (mA/cm2)": [Jsc]
-    })
-    return data
+    def set_mppt_testing_parameters(
+            self,
+            low_voltage: float,
+            high_voltage: float,
+            step_voltage: float,
+            scan_speed: float,
+            jv_sample_rate_modifier: float,
+            mpp_duration: float,
+            mpp_sample_interval: float,
+            cell_area: float,
+            solar_irradiance: float,
+            averages: int
+    ) -> None:
+        self.cell_area = cell_area
+        self.solar_irradiance = solar_irradiance
+        self.mpp_duration = mpp_duration
+        self.mpp_sample_interval = mpp_sample_interval
+        self.step_time = step_voltage/scan_speed
+        self.sample_interval = self.step_time*jv_sample_rate_modifier
+        self.step_voltage = step_voltage/1000
+        self.low_voltage = low_voltage
+        self.high_voltage = high_voltage
+        self.data_points = 140
+        self.averages = averages
 
 
-area = 6  # cm^2
-solar_power = 100  # mW/cm2
-cell_name = "2025-03-14-Si-test5"
+    def JV_scan(
+            self,
+            direction: str,
+    ) -> None:
+        if direction == FORWARD_SCAN:
+            voltage = np.linspace(self.low_voltage, self.high_voltage, self.data_points)
+        elif direction == REVERSE_SCAN:
+            voltage = np.linspace(self.high_voltage, self.low_voltage, self.data_points)
+        else:
+            print(f"ERROR: Scan direction, '{direction}', is invalid")
+            return
 
-path = f"./output/{cell_name}"
-if not os.path.exists(path):
-    os.makedirs(path)
+        with self.keithley as keithley:
+            for (i, v) in enumerate(voltage):
+                self.set_voltage_on_keithley(voltage, keithley)
+                current = keithley.mean_current
 
-GPIB_connection = "GPIB::24"
-data_points = 140
-averages = 5
-max_voltage = 0.8
-min_voltage = -0.2
-voltage_sweep_time = 0.07
+                self.cell.voltage.append(v)
+                self.cell.current.append(current)
+                self.cell.timestamp.append(datetime.now())
 
-voltage = np.linspace(min_voltage, max_voltage, data_points)
-voltage_reverse = np.linspace(max_voltage, min_voltage, data_points)
-current = np.zeros_like(voltage)
-current_reverse = np.zeros_like(voltage)
-resistance = np.zeros_like(voltage)
-resistance_reverse = np.zeros_like(voltage)
-power = np.zeros_like(voltage)
-power_reverse = np.zeros_like(voltage)
-
-with Keithley2400(GPIB_connection) as keithley:
-    print(keithley.id)
-    keithley.reset()
-    keithley.use_front_terminals()
-    keithley.apply_voltage()
-    keithley.measure_current()
-    keithley.enable_source()
-
-    print("JV Forward Sweep")
-    for (i, v) in enumerate(voltage):
-        keithley.config_buffer(averages)
-        keithley.source_voltage = v
-        keithley.start_buffer()
-        keithley.wait_for_buffer()
-        current[i] = keithley.mean_current
-        sleep(voltage_sweep_time)
-    resistance = voltage/current
-    current = current*1000/area
-    power = voltage*current
-    dataf = determine_cell_parameters(voltage, current, power, solar_power, "Forward")
-    dataf.to_csv(f"{path}/compiled_data.csv")
-    print(dataf)
-
-    sleep(1)
-    print("JV Reverse Sweep")
-    for (i, v) in enumerate(voltage_reverse):
-        keithley.config_buffer(averages)
-        keithley.source_voltage = v
-        keithley.start_buffer()
-        keithley.wait_for_buffer()
-        current_reverse[i] = keithley.mean_current
-        sleep(voltage_sweep_time)
-    resistance_reverse = voltage_reverse/current_reverse
-    current_reverse = current_reverse*1000/area
-    power_reverse = voltage_reverse*current_reverse
-    datar = determine_cell_parameters(voltage_reverse, current_reverse, power_reverse, solar_power, "Reverse")
-    datar.to_csv(f"{path}/compiled_data.csv", mode = "a", header = False)
-    print(datar)
-
-data = pd.DataFrame({
-    "Forward Voltage (V)": voltage,
-    "Forward Current Density (mA/cm2)": current,
-    "Forward Power Density (mW/cm2)": power,
-    "Forward Efficiency (%)": power/solar_power * 100,
-    "Forward Resistance (Ohms)": resistance,
-    "Reverse Voltage (V)": voltage_reverse,
-    "Reverse Current Density (mA/cm2)": current_reverse,
-    "Reverse Power Density (mW/cm2)": power_reverse,
-    "Reverse Efficiency (%)": power_reverse/solar_power * 100,
-    "Reverse Resistance (Ohms)": resistance_reverse
-})
-data.to_csv(f"{path}/data.csv")
+        self.cell.store()
 
 
-plt.plot(voltage, current, label = "Forward")
-plt.plot(voltage_reverse, current_reverse, label = "Reverse")
-plt.xlabel("Voltage (V)")
-plt.ylabel("Current Density ($mA/cm^2$)")
-plt.legend()
-plt.show()
+    def perform_JV_scans(self):
+        self.JV_scan(FORWARD_SCAN)
+        self.JV_scan(REVERSE_SCAN)
+        self.cell.format_results(self.cell_area, self.solar_irradiance, self.path)
+
+
+    # NOTE: Still need a way to record and possibly plot data
+    def perturb_and_observe(self, starting_voltage: float):
+        dV = self.step_voltage
+        V0 = starting_voltage
+        direction = 1
+
+        with self.keithley as keithley:
+            self.set_voltage_on_keithley(V0, keithley)
+            J0 = keithley.mean_current*1000/self.cell_area  # mA/cm2
+            P0 = -1*V0*J0  # mW/cm2
+
+            while True:
+                V = V0 + direction*dV
+                self.set_voltage_on_keithley(V, keithley)
+                J = keithley.mean_current*1000/self.cell_area  # mA/cm2
+                P = -1*V*J
+                if P > P0:
+                    if V > V0:
+                        direction = 1
+                    else:
+                        direction = -1
+                    P0 = P
+                    V0 = V
+                else:
+                    if V > V0:
+                        direction = -1
+                    else:
+                        direction = 1
+                    P0 = P
+                    V0 = V 
+
+
+    def perturb_and_observe_with_predictave_current(self, starting_voltage: float):
+        pass
+
+
+    def perturb_and_observe_metastable_psc(self, starting_voltage: float):
+        dV = self.step_voltage
+        V0 = starting_voltage
+
+
+    def routine_A(self) -> bool:
+        pass
+
+
+    def routine_B(self)-> bool:
+        pass
+
+
+# TODO: Need to implement this class in the KeithleyMppt class
+class KeithleyPlotter(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Live Plot Updates")
+        self.setGeometry(0, 0, 1200, 700)
+
+        # Create central widget
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
+
+        # Set main layout to be a vertical box
+        main_layout = QVBoxLayout(central_widget)
+
+        # Create 5 subplots
+        self.figure = Figure(figsize = (5, 2.5))
+        self.canvas = FigureCanvas(self.figure)
+
+        # Create axes and plots
+        self.axes = self.figure.add_subplot(111)
+
+        # Create a layout for the plot
+        layout = QVBoxLayout()
+        layout.addWidget(self.canvas)
+
+        # Add the layout to the main layout
+        main_layout.addLayout(layout)
+
+        # Initialize data for plotting
+        self.x_data = np.linspace(0, 10, 100)
+        self.y_data = np.zeros_like(self.x_data)
+
+        # Create the intial plot
+        self.axes.plot()
+        self.axes.set_xlabel("Voltage (V)")
+        self.axes.set_ylabel("Current Density ($mA/cm^{2}$)")
+        self.axes.set_title(f"JV Data")
+
+
+    def update_plot_data(self, data: MpptData) -> None:
+        self.axes.clear()
+
+        # Update MPPT plot
+        # TODO: Still need to figure out how to update the data properly
+        # self.axes.plot(data.forward_durations, data.forward_relative_efficiencies, color = 'b', label = f"Current Density")
+        # self.axes.plot(data.reverse_durations, data.reverse_relative_efficiencies, color = 'r', ls = ":", label = f"PCE")
+        
+        self.axes.set_xlabel("Duration")
+        self.axes.set_ylabel("Current Density ($mA/cm^{2}$)")
+        self.axes.set_title("MPPT")
+        self.axes.legend()
+
+        self.canvas.draw()
