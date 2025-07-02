@@ -32,9 +32,14 @@ class KeithleyMppt:
         self.keithley = Keithley2400(GPIB)
 
 
-    def set_voltage_on_keithley(self, voltage: float, keithley: Keithley2400) -> None:
-        if not self.keithley.open():
-            print("ERROR: Please open Keithley ")
+    def measure_current(
+            self,
+            voltage: float,
+            keithley: Keithley2400,
+            include_timestamp: bool = False
+    ) -> float | tuple[float, float]:
+        if not self.keithley.isShutdown:
+            print("ERROR: Keithley is in shutdown state.")
             return
         
         keithley.config_buffer(self.averages)
@@ -42,6 +47,11 @@ class KeithleyMppt:
         sleep(self.step_time)
         keithley.start_buffer()
         keithley.wait_for_buffer()
+
+        if include_timestamp:
+            return keithley.mean_current, datetime.now()
+        else:
+            return keithley.mean_current
 
 
     def set_mppt_testing_parameters(
@@ -101,52 +111,111 @@ class KeithleyMppt:
 
 
     # NOTE: Still need a way to record and possibly plot data
-    def perturb_and_observe(self, starting_voltage: float):
+    def perturb_and_observe(self, starting_voltage: float) -> None:
         dV = self.step_voltage
-        V0 = starting_voltage
+        Vo = starting_voltage
         direction = 1
 
         with self.keithley as keithley:
-            self.set_voltage_on_keithley(V0, keithley)
-            J0 = keithley.mean_current*1000/self.cell_area  # mA/cm2
-            P0 = -1*V0*J0  # mW/cm2
+            io = self.measure_current(Vo, keithley)
+            Po = -1*Vo*io  # mW/cm2
 
+            # TODO: Where to store voltage and current values?
             while True:
-                V = V0 + direction*dV
-                self.set_voltage_on_keithley(V, keithley)
-                J = keithley.mean_current*1000/self.cell_area  # mA/cm2
-                P = -1*V*J
-                if P > P0:
-                    if V > V0:
+                V = Vo + direction*dV
+                i = self.measure_current(Vo, keithley)
+                P = -1*V*i
+                if P > Po:
+                    if V > Vo:
                         direction = 1
                     else:
                         direction = -1
-                    P0 = P
-                    V0 = V
                 else:
-                    if V > V0:
+                    if V > Vo:
                         direction = -1
                     else:
                         direction = 1
-                    P0 = P
-                    V0 = V 
+
+                Po = P
+                Vo = V 
 
 
     def perturb_and_observe_with_predictave_current(self, starting_voltage: float):
         pass
 
-
-    def perturb_and_observe_metastable_psc(self, starting_voltage: float):
+    
+    # From paper, DOI: https://doi.org/10.5796/electrochemistry.20-00022
+    # "Development of a New MPPT Method for PCE Measurement of Metastable PSC"
+    # x in the flow chart seems to be a tolerance value for dP/dt
+    def perturb_and_observe_metastable_psc(
+            self,
+            starting_voltage: float,
+            tolerance: float,
+            delay_time: float
+    ) -> None:
         dV = self.step_voltage
-        V0 = starting_voltage
+        Vo = starting_voltage
+
+        with self.keithley as keithley:
+            Po, to = self.measure_current(Vo, keithley, include_timestamp = True)
+
+            # TODO: Where to store voltage and current values?
+            while True:
+                V = Vo + dV
+                P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+
+                if P > Po:
+                    if V <= Vo:
+                        Vo = V
+                        Po = P
+                        # Routine B is just Routine A but with a voltage pertubation
+                        V = V - 2*dV
+                        P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+
+                else:
+                    if V > Vo:
+                        Vo = V
+                        Po = P
+                        # Routine B is just Routine A but with a voltage pertubation
+                        V = V - 2*dV
+                        P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+
+                Vo = V
+                Po = P
 
 
-    def routine_A(self) -> bool:
-        pass
+    def routine_A(
+            self,
+            V: float,
+            Po: float,
+            to: float,
+            delay_time: float,
+            tolerance: float,
+            keithley: Keithley2400
+    ) -> tuple[float, float]:
+        i, t = self.measure_current(V, keithley, include_timestamp = True)
+        P = V*i
+        
+        # NOTE: measure_current() already uses a pre-set delay time, should this be removed?
+        sleep(delay_time)
+
+        dW = self.calculate_dP_over_dt(P, Po, t, to)
+        while dW < tolerance:
+            Po = P
+            to = t
+
+            i, t = self.measure_current(V, keithley, include_timestamp = True)
+            P = V*i
+            dW = self.calculate_dP_over_dt(P, Po, t, to)
+            # NOTE: dW should be in percent to match tolerance, should it not just be a ratio of dPnew/dPold?
+
+        return P, t
 
 
-    def routine_B(self)-> bool:
-        pass
+    def calculate_dP_over_dt(self, P: float, Po: float, t: float, to: float) -> float:
+        dP = np.abs(P - Po)
+        dt = np.abs(t - to)
+        return dP/dt
 
 
 # TODO: Need to implement this class in the KeithleyMppt class
