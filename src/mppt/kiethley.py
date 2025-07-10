@@ -30,6 +30,8 @@ class KeithleyMppt:
         self.path = path
         self.cell = MpptData(cell_name)
         self.keithley = Keithley2400(GPIB)
+        self.window = KeithleyPlotter()
+        self.window.show()
 
 
     def measure_current(
@@ -110,21 +112,20 @@ class KeithleyMppt:
         self.cell.format_results(self.cell_area, self.solar_irradiance, self.path)
 
 
-    # NOTE: Still need a way to record and possibly plot data
     def perturb_and_observe(self, starting_voltage: float) -> None:
         dV = self.step_voltage
         Vo = starting_voltage
         direction = 1
 
         with self.keithley as keithley:
-            io = self.measure_current(Vo, keithley)
-            Po = -1*Vo*io  # mW/cm2
+            io, to = self.measure_current(Vo, keithley, include_timestamp = True)
+            Po = -Vo*io  # mW/cm2
+            self.cell.append_data(Vo, io, to)
 
-            # TODO: Where to store voltage and current values?
             while True:
                 V = Vo + direction*dV
-                i = self.measure_current(Vo, keithley)
-                P = -1*V*i
+                i, t = self.measure_current(Vo, keithley, include_timestamp = True)
+                P = -V*i
                 if P > Po:
                     if V > Vo:
                         direction = 1
@@ -136,6 +137,8 @@ class KeithleyMppt:
                     else:
                         direction = 1
 
+                self.cell.append_data(V, i, t)
+                self.window.update_plot_data(self.cell, self.cell_area, self.solar_irradiance)
                 Po = P
                 Vo = V 
 
@@ -157,12 +160,17 @@ class KeithleyMppt:
         Vo = starting_voltage
 
         with self.keithley as keithley:
-            Po, to = self.measure_current(Vo, keithley, include_timestamp = True)
+            io, to = self.measure_current(Vo, keithley, include_timestamp = True)
+            Po = Vo*io
+            self.cell.append_data(Vo, io, to)
+            self.window.update_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
             # TODO: Where to store voltage and current values?
             while True:
                 V = Vo + dV
-                P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+                P, t = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+                self.cell.append_data(Vo, io, to)
+                self.window.update_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 if P > Po:
                     if V <= Vo:
@@ -171,6 +179,8 @@ class KeithleyMppt:
                         # Routine B is just Routine A but with a voltage pertubation
                         V = V - 2*dV
                         P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+                        self.cell.append_data(Vo, io, to)
+                        self.window.update_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 else:
                     if V > Vo:
@@ -179,6 +189,8 @@ class KeithleyMppt:
                         # Routine B is just Routine A but with a voltage pertubation
                         V = V - 2*dV
                         P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
+                        self.cell.append_data(Vo, io, to)
+                        self.window.update_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 Vo = V
                 Po = P
@@ -257,16 +269,18 @@ class KeithleyPlotter(QMainWindow):
         self.axes.set_title(f"JV Data")
 
 
-    def update_plot_data(self, data: MpptData) -> None:
+    def update_plot_data(self, data: MpptData, cell_area: float, solar_irradiance: float) -> None:
         self.axes.clear()
+        time = np.array((data.timestamp - data.timestamp[0])/60)  # minutes
+        voltage = np.array(data.voltage)
+        current_density = np.array(data.current*1000/cell_area)  # mA/cm2
+        efficiency = -voltage*current_density/solar_irradiance
 
         # Update MPPT plot
-        # TODO: Still need to figure out how to update the data properly
-        # self.axes.plot(data.forward_durations, data.forward_relative_efficiencies, color = 'b', label = f"Current Density")
-        # self.axes.plot(data.reverse_durations, data.reverse_relative_efficiencies, color = 'r', ls = ":", label = f"PCE")
+        self.axes.plot(time, voltage, color = 'b', label = f"Voltage (V)")
+        self.axes.plot(time, efficiency, color = 'r', ls = ":", label = f"PCE")
         
-        self.axes.set_xlabel("Duration")
-        self.axes.set_ylabel("Current Density ($mA/cm^{2}$)")
+        self.axes.set_xlabel("Duration (Min)")
         self.axes.set_title("MPPT")
         self.axes.legend()
 
