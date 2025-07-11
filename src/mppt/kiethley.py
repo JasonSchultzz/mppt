@@ -32,6 +32,9 @@ class KeithleyMppt:
         self.keithley = Keithley2400(GPIB)
         self.keithley.reset()
         self.keithley.use_front_terminals()
+        self.keithley.apply_voltage()
+        self.keithley.measure_current()
+        self.keithley.enable_source()
         self.window = KeithleyPlotter()
         self.window.show()
 
@@ -108,7 +111,6 @@ class KeithleyMppt:
 
     def perform_JV_scans(self):
         with self.keithley as keithley:
-            keithley.enable_source()
             self.JV_scan(FORWARD_SCAN, keithley)
             self.JV_scan(REVERSE_SCAN, keithley)
         self.window.update_JV_plot_data(self.cell, self.cell_area)
@@ -121,15 +123,16 @@ class KeithleyMppt:
         direction = 1
 
         with self.keithley as keithley:
-            keithley.enable_source()
             io, to = self.measure_current(Vo, keithley, include_timestamp = True)
-            Po = -Vo*io  # mW/cm2
+            Po = -1*Vo*io
+            print(f"Power: {Po} W")
             self.cell.append_data(Vo, io, to)
 
             while True:
                 V = Vo + direction*dV
                 i, t = self.measure_current(Vo, keithley, include_timestamp = True)
-                P = -V*i
+                P = -1*V*i
+                print(f"Power: {P} W")
                 if P > Po:
                     if V > Vo:
                         direction = 1
@@ -164,7 +167,6 @@ class KeithleyMppt:
         Vo = starting_voltage
 
         with self.keithley as keithley:
-            keithley.enable_source()
             io, to = self.measure_current(Vo, keithley, include_timestamp = True)
             Po = Vo*io
             self.cell.append_data(Vo, io, to)
