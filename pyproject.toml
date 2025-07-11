@@ -30,7 +30,8 @@ dependencies = [
    "gpib-ctypes",
    "zeroconf",
    "psutil",
-   "pyvisa-py"
+   "pyvisa-py",
+   "openpyxl"
   #  "my_module @ git+https://github.com/my_github/my_repo.git@tag", 
 ]
 # Use this line if your project comprises of modules only without any ./src/* files
