@@ -35,6 +35,7 @@ class KeithleyMppt:
         self.keithley.apply_voltage()
         self.keithley.measure_current()
         self.keithley.enable_source()
+
         self.window = KeithleyPlotter()
         self.window.show()
 
@@ -129,23 +130,19 @@ class KeithleyMppt:
 
             while True:
                 V = Vo + direction*dV
-                i, t = self.measure_current(Vo, keithley, include_timestamp = True)
+                i, t = self.measure_current(V, keithley, include_timestamp = True)
                 P = -1*V*i
-                print(f"P: {P}  Po: {Po}  V: {V}  Vo: {Vo}")
+                
                 if P > Po:
                     if V > Vo:
                         direction = 1
-                        print("Keep")
                     else:
                         direction = -1
-                        print("Flip")
                 else:
                     if V > Vo:
                         direction = -1
-                        print("Flip")
                     else:
                         direction = 1
-                        print("Keep")
 
                 self.cell.append_data(V, i, t)
                 self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
@@ -270,6 +267,7 @@ class KeithleyPlotter(QMainWindow):
 
 
     def update_mppt_plot_data(self, data: MpptData, cell_area: float, solar_irradiance: float) -> None:
+        print("UPDATE")
         self.axes.clear()
         time = []
         for t in data.timestamp:
