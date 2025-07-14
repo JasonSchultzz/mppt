@@ -125,24 +125,27 @@ class KeithleyMppt:
         with self.keithley as keithley:
             io, to = self.measure_current(Vo, keithley, include_timestamp = True)
             Po = -1*Vo*io
-            print(f"Power: {Po} W")
             self.cell.append_data(Vo, io, to)
 
             while True:
                 V = Vo + direction*dV
                 i, t = self.measure_current(Vo, keithley, include_timestamp = True)
                 P = -1*V*i
-                print(f"Power: {P} W")
+                print(f"P: {P}  Po: {Po}  V: {V}  Vo: {Vo}")
                 if P > Po:
                     if V > Vo:
                         direction = 1
+                        print("Keep")
                     else:
                         direction = -1
+                        print("Flip")
                 else:
                     if V > Vo:
                         direction = -1
+                        print("Flip")
                     else:
                         direction = 1
+                        print("Keep")
 
                 self.cell.append_data(V, i, t)
                 self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
