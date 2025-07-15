@@ -170,10 +170,10 @@ class KeithleyMppt:
                         direction = 1
 
                 self.cell.append_data(V, i, t)
-                self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
                 Po = P
                 Vo = V 
 
+            self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
             self.cell.format_mpp_results()
 
 
@@ -199,8 +199,8 @@ class KeithleyMppt:
             self.cell.append_data(Vo, io, to)
             self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
-            # TODO: Where to store voltage and current values?
-            while True:
+            mpp_start = datetime.now()
+            while (datetime.now() - mpp_start).total_seconds() < self.mpp_duration:
                 V = Vo + dV
                 P, t = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
                 self.cell.append_data(Vo, io, to)
@@ -294,7 +294,6 @@ class KeithleyPlotter(QMainWindow):
 
 
     def update_mppt_plot_data(self, data: MpptData, cell_area: float, solar_irradiance: float) -> None:
-        print("UPDATE")
         self.axes.clear()
         time = []
         for t in data.timestamp:
