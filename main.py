@@ -16,23 +16,26 @@ from PySide6.QtWidgets import QApplication
 def keithley_main():
     app = QApplication()
     manager = KeithleyMppt(
-        path = "./output",
         GPIB = GPIB,
-        cell_name = "2025-07-11-TEST"        
+        year = "2025",
+        fabricator = "Elnaz",
+        cell_name = "08u",
+        cell_area = 0.16,
+        solar_irradiance = 100
     )
-    manager.set_mppt_testing_parameters(
-        low_voltage = -0.2,         # V
-        high_voltage = 1.2,         # V
-        step_voltage = 30,          # mV
-        scan_speed = 100,           # mV/s
-        mpp_duration = 30,          # s
-        mpp_sample_interval = 1,    # s
-        cell_area = 0.16,           # cm2
-        solar_irradiance = 100,     # mW/cm2
-        averages = 5
+    manager.set_JV_parameters_with_time_step(
+        high_voltage = 1.2,
+        low_voltage = -0.2,
+        step_voltage_mV = 10,
+        step_time_ms = 100,
+        averages = 1
     )
-    # manager.perform_JV_scans()
-    manager.perturb_and_observe_metastable_psc(starting_voltage = 0.5, tolerance = 1, delay_time = 0.1)
+    manager.set_mppt_parameters(
+        mpp_duration = 30
+    )
+    manager.perform_JV_scans()
+    # manager.perturb_and_observe(starting_voltage = 0.5)
+    # manager.perturb_and_observe_metastable_psc(starting_voltage = 0.5, tolerance = 1, delay_time = 0.1)
     sys.exit(app.exec())
 
 

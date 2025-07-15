@@ -69,6 +69,9 @@ class MpptData:
             cell_area: float,
             solar_irradiance: float,
             directory: str,
+            step_voltage_mV: float,
+            step_time_ms: float,
+            scan_speed_mV_s: float
     ) -> None:
         path = f"{directory}/{self.name}"
         if not os.path.exists(path):
@@ -96,7 +99,10 @@ class MpptData:
                 "Jsc (mA/cm2)": [],
                 "Rseries (Ohm)": [],
                 "Rshunt (Ohm)": [],
-                "Hysteresis Index": []
+                "Hysteresis Index": [],
+                "Step Voltage (mV)": [],
+                "Step Time (ms)": [],
+                "Scan Rate (mV/s)": []
             }
         compiled_data = self.compile_data(compiled_data, forward_data, FORWARD_SCAN, cell_area)
         compiled_data = self.compile_data(compiled_data, reverse_data, REVERSE_SCAN, cell_area)
@@ -127,7 +133,15 @@ class MpptData:
             self.first = False
 
 
-    def compile_sweep_data(self, data: pd.DataFrame, cell_area: float, solar_irradiance: float) -> pd.DataFrame:
+    def compile_sweep_data(
+            self,
+            data: pd.DataFrame,
+            cell_area: float,
+            solar_irradiance: float,
+            step_volage_mV: float,
+            step_time_ms: float,
+            scan_speed_mV_s: float
+    ) -> pd.DataFrame:
         voltage = np.array(data["Voltage (V)"])  # V
         current_density = np.array(data["Current (A)"])*1000/cell_area  # mA/cm2
         power_density = voltage*current_density  # mW/cm2
@@ -137,7 +151,10 @@ class MpptData:
                 "Voltage (V)": voltage,
                 "Current Density (mA/cm2)": current_density,
                 "Power Density (mW/cm2)": power_density,
-                "PCE (%)": efficiency
+                "PCE (%)": efficiency,
+                "Step Voltage (mV)": np.ones(len(voltage))*step_volage_mV,
+                "Step Time (ms)": np.ones(len(voltage))*step_time_ms,
+                "Scan Speed (mV/s)": np.ones(len(voltage))*scan_speed_mV_s
         })
 
 
@@ -147,6 +164,9 @@ class MpptData:
             sweep_data: pd.DataFrame,
             scan_direction: str,
             cell_area: float,
+            step_volage_mV: float,
+            step_time_ms: float,
+            scan_speed_mV_s: float
     ) -> dict:
         
         mpp_index = np.argmin(sweep_data["Power Density (mW/cm2)"])
@@ -248,6 +268,9 @@ class MpptData:
         data["Rseries (Ohm)"].append(Rseries)
         data["Rshunt (Ohm)"].append(Rshunt)
         data["Hysteresis Index"].append(hysteresis_index)
+        data["Step Voltage (mV)"].append(step_volage_mV)
+        data["Step Time (ms)"].append(step_time_ms)
+        data["Scan Rate (mV/s)"].append(scan_speed_mV_s)
         return data
 
 

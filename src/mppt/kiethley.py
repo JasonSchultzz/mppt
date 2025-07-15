@@ -18,17 +18,24 @@ from matplotlib.figure import Figure
 from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, FORWARD_SCAN, REVERSE_SCAN, MpptData
 
 GPIB = "GPIB::24"
+OUTPUT = "./output"
 
 
 class KeithleyMppt:
     def __init__(
             self,
-            path: str,
             GPIB: str,
+            year: str,
+            fabricator: str,
             cell_name: str,
+            cell_area: float,
+            solar_irradiance: float
     ) -> None:
-        self.path = path
+        self.path = f"{OUTPUT}/{year}/{fabricator}"
         self.cell = MpptData(cell_name)
+        self.cell_area = cell_area
+        self.solar_irradiance = solar_irradiance
+
         self.keithley = Keithley2400(GPIB)
         self.keithley.reset()
         self.keithley.use_front_terminals()
@@ -38,6 +45,47 @@ class KeithleyMppt:
 
         self.window = KeithleyPlotter()
         self.window.show()
+
+
+    def set_JV_parameters_with_time_step(
+            self,
+            high_voltage: float,
+            low_voltage: float,
+            step_voltage_mV: float,
+            step_time_ms: float,
+            averages: int
+    ) -> None:
+        self.step_time = step_time_ms
+        self.step_voltage = step_voltage_mV/1000  # Convert to V
+        self.scan_speed = step_voltage_mV/(step_time_ms/1000)
+        self.low_voltage = low_voltage
+        self.high_voltage = high_voltage
+        self.data_points = int((high_voltage-low_voltage)/self.step_voltage)
+        self.averages = averages
+
+
+    def set_JV_parameters_with_scan_speed(
+            self,
+            high_voltage: float,
+            low_voltage: float,
+            step_voltage_mV: float,
+            scan_speed_mV_s: float,
+            averages: int
+    ) -> None:
+        self.step_time = step_voltage_mV/scan_speed_mV_s
+        self.step_voltage = step_voltage_mV/1000  # Convert to V
+        self.scan_speed = scan_speed_mV_s
+        self.low_voltage = low_voltage
+        self.high_voltage = high_voltage
+        self.data_points = int((high_voltage-low_voltage)/self.step_voltage)
+        self.averages = averages
+
+
+    def set_mppt_parameters(
+            self,
+            mpp_duration: float,
+    ) -> None:
+        self.mpp_duration = mpp_duration
 
 
     def measure_current(
@@ -61,30 +109,6 @@ class KeithleyMppt:
             return keithley.mean_current, datetime.now()
         else:
             return keithley.mean_current
-
-
-    def set_mppt_testing_parameters(
-            self,
-            low_voltage: float,
-            high_voltage: float,
-            step_voltage: float,
-            scan_speed: float,
-            mpp_duration: float,
-            mpp_sample_interval: float,
-            cell_area: float,
-            solar_irradiance: float,
-            averages: int
-    ) -> None:
-        self.cell_area = cell_area
-        self.solar_irradiance = solar_irradiance
-        self.mpp_duration = mpp_duration
-        self.mpp_sample_interval = mpp_sample_interval
-        self.step_time = step_voltage/scan_speed
-        self.step_voltage = step_voltage/1000  # Convert to V
-        self.low_voltage = low_voltage
-        self.high_voltage = high_voltage
-        self.data_points = int((high_voltage-low_voltage)/self.step_voltage)
-        self.averages = averages
 
 
     def JV_scan(
@@ -128,7 +152,8 @@ class KeithleyMppt:
             Po = -1*Vo*io
             self.cell.append_data(Vo, io, to)
 
-            while True:
+            mpp_start = datetime.now()
+            while (datetime.now() - mpp_start).total_seconds() < self.mpp_duration:
                 V = Vo + direction*dV
                 i, t = self.measure_current(V, keithley, include_timestamp = True)
                 P = -1*V*i
@@ -148,6 +173,8 @@ class KeithleyMppt:
                 self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
                 Po = P
                 Vo = V 
+
+            self.cell.format_mpp_results()
 
 
     def perturb_and_observe_with_predictave_current(self, starting_voltage: float):
