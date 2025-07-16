@@ -7,13 +7,19 @@ from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltag
 from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, MpptData
 
 
+OUTPUT = "./output"
+
+
 class SquidstatMppt:
     def __init__(
             self,
-            path: str,
-            port: str,
             device_name: str,
-            channel_names: list[str]
+            port: str,
+            year: str,
+            fabricator: str,
+            channel_names: list[str],
+            cell_area: float,
+            solar_irradiance: float
     ) -> None:
         assert(len(channel_names) <= 4)
         self.channel_data: list[MpptData] = []
@@ -23,7 +29,10 @@ class SquidstatMppt:
         self.window = SquidPlotter()
         self.window.show()
 
-        self.path = path
+        self.cell_area = cell_area
+        self.solar_irradiance = solar_irradiance
+
+        self.path = f"{OUTPUT}/{year}/{fabricator}"
         self.tracker = AisDeviceTracker.Instance()
         self.tracker.newDeviceConnected.connect(lambda deviceName: print("Device is Connected: %s" % deviceName))
         self.tracker.connectToDeviceOnComPort(port)
@@ -45,39 +54,41 @@ class SquidstatMppt:
         self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
 
 
-    def set_mppt_testing_parameters(
+    def set_mppt_parameters(
             self,
-            low_voltage: float,
-            high_voltage: float,
-            step_voltage: float,
-            scan_speed: float,
-            jv_sample_rate_modifier: float,
             mpp_duration: float,
             mpp_sample_interval: float,
-            cell_area: float,
-            solar_irradiance: float
     ) -> None:
-        self.cell_area = cell_area
-        self.solar_irradiance = solar_irradiance
         self.mpp_duration = mpp_duration
         self.mpp_sample_interval = mpp_sample_interval
-        step_time = step_voltage/scan_speed
-        sample_interval = step_time*jv_sample_rate_modifier
-        step_voltage_in_volts = step_voltage/1000
+
+    
+    def set_JV_parameters(
+            self,
+            high_voltage: float,
+            low_voltage: float,
+            step_voltage_mV: float,
+            step_time_ms: float,
+            jv_sample_rate_modifier: float = 1
+    ) -> None:
+        self.step_time = step_time_ms/1000
+        sample_interval = self.step_time*jv_sample_rate_modifier
+        self.step_voltage = step_voltage_mV/1000
+        self.scan_speed = step_voltage_mV/(step_time_ms/1000)
 
         self.experiment = AisExperiment()
         self.forwardJVSweep = AisSteppedVoltageElement(
             low_voltage,
             high_voltage,
-            step_voltage_in_volts,
-            step_time,
+            self.step_voltage,
+            self.step_time,
             sample_interval
         )
         self.reverseJVSweep = AisSteppedVoltageElement(
             high_voltage,
             low_voltage,
-            step_voltage_in_volts,
-            step_time,
+            self.step_voltage,
+            self.step_time,
             sample_interval
         )
         
@@ -126,6 +137,9 @@ class SquidstatMppt:
                 self.cell_area,
                 self.solar_irradiance,
                 self.path,
+                self.step_voltage*1000,
+                self.step_time*1000,
+                self.scan_speed
             )
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(MPP_STATE):

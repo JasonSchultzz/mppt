@@ -82,8 +82,8 @@ class MpptData:
             print(f"Time: {datetime.now()}, Channel {self.name}: Recording of forward or reverse JV sweep failed.")
             return
         
-        forward_data = self.compile_sweep_data(self.sweep_data_list[0], cell_area, solar_irradiance)
-        reverse_data = self.compile_sweep_data(self.sweep_data_list[1], cell_area, solar_irradiance)
+        forward_data = self.compile_sweep_data(self.sweep_data_list[0], cell_area, solar_irradiance, step_voltage_mV, step_time_ms, scan_speed_mV_s)
+        reverse_data = self.compile_sweep_data(self.sweep_data_list[1], cell_area, solar_irradiance, step_voltage_mV, step_time_ms, scan_speed_mV_s)
         forward_data.to_csv(f"{path}/forward_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/forward_sweep_data.csv"))
         reverse_data.to_csv(f"{path}/reverse_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_sweep_data.csv"))
 
@@ -104,8 +104,8 @@ class MpptData:
                 "Step Time (ms)": [],
                 "Scan Rate (mV/s)": []
             }
-        compiled_data = self.compile_data(compiled_data, forward_data, FORWARD_SCAN, cell_area)
-        compiled_data = self.compile_data(compiled_data, reverse_data, REVERSE_SCAN, cell_area)
+        compiled_data = self.compile_data(compiled_data, forward_data, FORWARD_SCAN, cell_area, step_voltage_mV, step_time_ms, scan_speed_mV_s)
+        compiled_data = self.compile_data(compiled_data, reverse_data, REVERSE_SCAN, cell_area, step_voltage_mV, step_time_ms, scan_speed_mV_s)
 
         # Determine Vmpp for MPPT as a simple average for now
         self.set_Vmpp_for_MPPT(self.Vmpp_forward, self.Vmpp_reverse)
@@ -138,7 +138,7 @@ class MpptData:
             data: pd.DataFrame,
             cell_area: float,
             solar_irradiance: float,
-            step_volage_mV: float,
+            step_voltage_mV: float,
             step_time_ms: float,
             scan_speed_mV_s: float
     ) -> pd.DataFrame:
@@ -152,7 +152,7 @@ class MpptData:
                 "Current Density (mA/cm2)": current_density,
                 "Power Density (mW/cm2)": power_density,
                 "PCE (%)": efficiency,
-                "Step Voltage (mV)": np.ones(len(voltage))*step_volage_mV,
+                "Step Voltage (mV)": np.ones(len(voltage))*step_voltage_mV,
                 "Step Time (ms)": np.ones(len(voltage))*step_time_ms,
                 "Scan Speed (mV/s)": np.ones(len(voltage))*scan_speed_mV_s
         })

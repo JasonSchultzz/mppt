@@ -17,6 +17,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, FORWARD_SCAN, REVERSE_SCAN, MpptData
 
+
 GPIB = "GPIB::24"
 OUTPUT = "./output"
 
@@ -55,7 +56,7 @@ class KeithleyMppt:
             step_time_ms: float,
             averages: int
     ) -> None:
-        self.step_time = step_time_ms
+        self.step_time = step_time_ms/1000
         self.step_voltage = step_voltage_mV/1000  # Convert to V
         self.scan_speed = step_voltage_mV/(step_time_ms/1000)
         self.low_voltage = low_voltage
@@ -139,7 +140,7 @@ class KeithleyMppt:
             self.JV_scan(FORWARD_SCAN, keithley)
             self.JV_scan(REVERSE_SCAN, keithley)
         self.window.update_JV_plot_data(self.cell, self.cell_area)
-        self.cell.format_results(self.cell_area, self.solar_irradiance, self.path)
+        self.cell.format_results(self.cell_area, self.solar_irradiance, self.path, self.step_voltage*1000, self.step_time*1000, self.scan_speed)
 
 
     def perturb_and_observe(self, starting_voltage: float) -> None:
@@ -174,7 +175,7 @@ class KeithleyMppt:
                 Vo = V 
 
             self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
-            self.cell.format_mpp_results()
+            self.cell.format_mpp_results(self.cell_area, self.solar_irradiance, self.path)
 
 
     def perturb_and_observe_with_predictave_current(self, starting_voltage: float):
@@ -197,14 +198,13 @@ class KeithleyMppt:
             io, to = self.measure_current(Vo, keithley, include_timestamp = True)
             Po = Vo*io
             self.cell.append_data(Vo, io, to)
-            self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
+            
 
             mpp_start = datetime.now()
             while (datetime.now() - mpp_start).total_seconds() < self.mpp_duration:
                 V = Vo + dV
                 P, t = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
                 self.cell.append_data(Vo, io, to)
-                self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 if P > Po:
                     if V <= Vo:
@@ -214,7 +214,6 @@ class KeithleyMppt:
                         V = V - 2*dV
                         P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
                         self.cell.append_data(Vo, io, to)
-                        self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 else:
                     if V > Vo:
@@ -224,10 +223,12 @@ class KeithleyMppt:
                         V = V - 2*dV
                         P = self.routine_A(V, Po, to, delay_time, tolerance, keithley)
                         self.cell.append_data(Vo, io, to)
-                        self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
 
                 Vo = V
                 Po = P
+
+            self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
+            self.cell.format_mpp_results(self.cell_area, self.solar_irradiance, self.path)
 
 
     def routine_A(
