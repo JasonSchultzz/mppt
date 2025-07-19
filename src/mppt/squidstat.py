@@ -1,10 +1,11 @@
 import numpy as np
 from datetime import datetime
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QGridLayout
+from PySide6.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement
-from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, MpptData
+from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement, AisErrorCode
+from mppt.mppt import JV_STATE, MPPT_STATE, CONST_V_STATE, DEAD_STATE, MpptData
 
 
 OUTPUT = "./output"
@@ -16,10 +17,12 @@ class SquidstatMppt:
             device_name: str,
             port: str,
             year: str,
+            date: str,
             fabricator: str,
             channel_names: list[str],
             cell_area: float,
-            solar_irradiance: float
+            solar_irradiance: float,
+            main_state: str = CONST_V_STATE
     ) -> None:
         assert(len(channel_names) <= 4)
         self.channel_data: list[MpptData] = []
@@ -31,8 +34,9 @@ class SquidstatMppt:
 
         self.cell_area = cell_area
         self.solar_irradiance = solar_irradiance
+        self.main_state = main_state
 
-        self.path = f"{OUTPUT}/{year}/{fabricator}"
+        self.path = f"{OUTPUT}/{fabricator}/{year}/{date}"
         self.tracker = AisDeviceTracker.Instance()
         self.tracker.newDeviceConnected.connect(lambda deviceName: print("Device is Connected: %s" % deviceName))
         self.tracker.connectToDeviceOnComPort(port)
@@ -54,13 +58,13 @@ class SquidstatMppt:
         self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
 
 
-    def set_mppt_parameters(
+    def set_const_voltage_parameters(
             self,
-            mpp_duration: float,
-            mpp_sample_interval: float,
+            duration: float,
+            sample_interval: float,
     ) -> None:
-        self.mpp_duration = mpp_duration
-        self.mpp_sample_interval = mpp_sample_interval
+        self.const_voltage_duration = duration
+        self.const_voltage_sample_interval = sample_interval
 
     
     def set_JV_parameters(
@@ -96,7 +100,14 @@ class SquidstatMppt:
         self.experiment.appendElement(self.reverseJVSweep)
         
 
-    def start_JVsweep(self) -> None:
+    def set_mppt_parameters(
+            self,
+            mppt_duration: float,
+    ) -> None:
+        self.mppt_duration = mppt_duration
+
+
+    def start_JV_scans(self) -> None:
         # Ensure list is not empty -> at least one channel is used
         assert(self.channel_data)
         for (i, _) in enumerate(self.channel_data):
@@ -104,13 +115,13 @@ class SquidstatMppt:
             self.handler.startUploadedExperiment(i)
 
 
-    def start_MPP(self) -> None:
+    def start_const_voltage(self) -> None:
         assert(self.channel_data)
         for (i, channel) in enumerate(self.channel_data):
             constant_potential = AisConstantPotElement(
                 channel.Vmpp,
-                self.mpp_sample_interval,
-                self.mpp_duration
+                self.const_voltage_sample_interval,
+                self.const_voltage_duration
             )
             constant_potential_experiment = AisExperiment()
             constant_potential_experiment.appendElement(constant_potential)
@@ -118,20 +129,64 @@ class SquidstatMppt:
             self.handler.startUploadedExperiment(i)
 
 
+    def setConstantVoltage(self, channel: int, voltage: float) -> None:
+        print("Switching to constant voltage at 1V")
+        error = self.handler.setManualModeConstantVoltage(channel, voltage)
+        if error.value() != AisErrorCode.Success:
+            print(error.message())
+
+
+    def preturb_and_observe(self, starting_voltage: float, channel: int)-> None:
+        dV = self.step_voltage
+        Vo = starting_voltage
+        direction = 1
+
+        with self.keithley as keithley:
+            io, to = self.measure_current(Vo, keithley, include_timestamp = True)
+            Po = -1*Vo*io
+            self.cell.append_data(Vo, io, to)
+
+            mpp_start = datetime.now()
+            while (datetime.now() - mpp_start).total_seconds() < self.mpp_duration:
+                V = Vo + direction*dV
+                i, t = self.measure_current(V, keithley, include_timestamp = True)
+                P = -1*V*i
+                
+                if P > Po:
+                    if V > Vo:
+                        direction = 1
+                    else:
+                        direction = -1
+                else:
+                    if V > Vo:
+                        direction = -1
+                    else:
+                        direction = 1
+
+                self.cell.append_data(V, i, t)
+                Po = P
+                Vo = V 
+
+            self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
+            self.cell.format_mpp_results(self.cell_area, self.solar_irradiance, self.path)
+
+
     def experiment_started(self, channel: int) -> None:
-        if self.channel_data[channel].state == JV_SWEEP_STATE:
+        if self.channel_data[channel].state == JV_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep started")
             self.channel_data[channel].store()
-        elif self.channel_data[channel].state == MPP_STATE:
-            print(f"Time: {datetime.now()}, Channel {channel}: MPP started at {self.channel_data[channel].Vmpp:.2f}")
+        elif self.channel_data[channel].state == CONST_V_STATE:
+            print(f"Time: {datetime.now()}, Channel {channel}: Constant voltage started at {self.channel_data[channel].Vmpp:.2f}")
+        elif self.channel_data[channel].state == MPPT_STATE:
+            print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
         else:  # Dead state
             print(f"Time: {datetime.now()}, Channel {channel}: DEAD STATE - SHOULD NOT BE STARTING AN EXPERIMENT")
 
 
     def experiment_finished(self, channel: int) -> None:
         # JV Sweeps finished. Compile data and proceed to held MPP state if all other channels are also finished.
-        if self.channel_data[channel].state == JV_SWEEP_STATE:
-            self.channel_data[channel].state = MPP_STATE
+        if self.channel_data[channel].state == JV_STATE:
+            self.channel_data[channel].state = self.main_state
             self.channel_data[channel].store()
             self.channel_data[channel].format_results(
                 self.cell_area,
@@ -142,21 +197,21 @@ class SquidstatMppt:
                 self.scan_speed
             )
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
-            if self.confirm_all_matching_states(MPP_STATE):
+            if self.confirm_all_matching_states(self.main_state):
                 self.window.update_plot_data(self.channel_data)
-                self.start_MPP()
+                self.start_const_voltage()
 
         # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
-        elif self.channel_data[channel].state == MPP_STATE:
-            self.channel_data[channel].state = JV_SWEEP_STATE
+        elif self.channel_data[channel].state == self.main_state:
+            self.channel_data[channel].state = JV_STATE
             self.channel_data[channel].format_mpp_results(
                 self.cell_area,
                 self.solar_irradiance,
                 self.path
             )
             print(f"Time: {datetime.now()}, Channel {channel}: MPP duration elapsed")
-            if self.confirm_all_matching_states(JV_SWEEP_STATE):
-                self.start_JVsweep()
+            if self.confirm_all_matching_states(JV_STATE):
+                self.start_JV_scans()
 
         # Dead state
         else:  

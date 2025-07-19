@@ -3,9 +3,10 @@ import pandas as pd
 from datetime import datetime
 import os
 
-JV_SWEEP_STATE = 0
-MPP_STATE = 1
-DEAD_STATE = 2
+JV_STATE = 0
+MPPT_STATE = 1
+CONST_V_STATE = 2
+DEAD_STATE = 3
 FORWARD_SCAN = "Forward"
 REVERSE_SCAN = "Reverse"
 
@@ -16,7 +17,7 @@ class MpptData:
         self.timestamp = []
         self.sweep_data_list = []
         self.name = name
-        self.state = JV_SWEEP_STATE
+        self.state = JV_STATE
 
         self.initial_forward_voltage = None
         self.initial_forward_current_density = None

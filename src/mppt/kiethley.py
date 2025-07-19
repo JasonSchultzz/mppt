@@ -27,12 +27,13 @@ class KeithleyMppt:
             self,
             GPIB: str,
             year: str,
+            date: str,
             fabricator: str,
             cell_name: str,
             cell_area: float,
             solar_irradiance: float
     ) -> None:
-        self.path = f"{OUTPUT}/{year}/{fabricator}"
+        self.path = f"{OUTPUT}/{fabricator}/{year}/{date}"
         self.cell = MpptData(cell_name)
         self.cell_area = cell_area
         self.solar_irradiance = solar_irradiance

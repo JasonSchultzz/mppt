@@ -10,6 +10,7 @@
 import sys
 from mppt.squidstat import SquidstatMppt
 from mppt.kiethley import KeithleyMppt, GPIB
+from mppt.mppt import CONST_V_STATE, MPPT_STATE
 from PySide6.QtWidgets import QApplication
 
 
@@ -18,8 +19,9 @@ def keithley_main():
     manager = KeithleyMppt(
         GPIB = GPIB,
         year = "2025",
+        date = "07-15",
         fabricator = "Elnaz",
-        cell_name = "07-15-08u",
+        cell_name = "08u",
         cell_area = 0.16,
         solar_irradiance = 100
     )
@@ -45,12 +47,14 @@ def squid_main():
         device_name = "Prime2809",
         port = "COM11",
         year = "2025",
+        date = "07-16",
         fabricator = "Elnaz",
         channel_names = [
-            "07-16-08u-epfl",
+            "08u-epfl",
             ],
         cell_area = 0.16,
-        solar_irradiance = 100
+        solar_irradiance = 100,
+        main_state = CONST_V_STATE
     )
     manager.set_JV_parameters(
         high_voltage = 1.2,
@@ -59,11 +63,11 @@ def squid_main():
         step_time_ms = 100,
         jv_sample_rate_modifier = 1
     )
-    manager.set_mppt_parameters(
-        mpp_duration = 30,
-        mpp_sample_interval = 1
+    manager.set_const_voltage_parameters(
+        duration = 30,
+        sample_interval = 1
     )
-    manager.start_JVsweep()
+    manager.start_JV_scans()
 
     sys.exit(app.exec())
 
