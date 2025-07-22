@@ -57,6 +57,9 @@ class SquidstatMppt:
         # What happens when an experiment is finished
         self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
 
+        # What happens when an error occurs
+        self.handler.deviceError.connect(lambda channel, error: print(f"Device Error: {error}"))
+
 
     def set_const_voltage_parameters(
             self,
@@ -129,17 +132,36 @@ class SquidstatMppt:
             self.handler.startUploadedExperiment(i)
 
 
-    def setConstantVoltage(self, channel: int, voltage: float) -> None:
+    def set_manual_mppt_voltage(self, channel: int, voltage: float) -> None:
         print("Switching to constant voltage at 1V")
         error = self.handler.setManualModeConstantVoltage(channel, voltage)
         if error.value() != AisErrorCode.Success:
             print(error.message())
 
 
+    def stop_mppt_experiment(self, channel: int) -> None:
+            print("Stopping experiment.")
+            error = self.handler.stopExperiment(channel)
+            if error.value() != AisErrorCode.Success:
+                print(error.message())
+
+
+    def start_mppt_experiment(self, channel: int) -> None:
+        print("Starting manual mode at open circuit potential")
+        error = self.handler.startManualExperiment(channel)
+        if error.value() != AisErrorCode.Success:
+            print(error.message())
+
+        # Set timer to stop the MPPT experiment
+        QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(channel))
+
+
     def preturb_and_observe(self, starting_voltage: float, channel: int)-> None:
         dV = self.step_voltage
         Vo = starting_voltage
         direction = 1
+
+        self.start_mppt_experiment(channel)
 
         with self.keithley as keithley:
             io, to = self.measure_current(Vo, keithley, include_timestamp = True)
