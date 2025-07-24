@@ -46,13 +46,7 @@ class SquidstatMppt:
         self.handler.experimentNewElementStarting.connect(lambda channel, data: self.experiment_started(channel))
         
         # What happens when data is recorded
-        self.handler.activeDCDataReady.connect(
-            lambda channel, data: self.channel_data[channel].append_data(
-                                        data.workingElectrodeVoltage,
-                                        data.current,
-                                        datetime.now()
-                                    )
-        )
+        self.handler.activeDCDataReady.connect(lambda channel, data: self.data_received(channel, data))
 
         # What happens when an experiment is finished
         self.handler.experimentStopped.connect(lambda channel: self.experiment_finished(channel))
@@ -106,8 +100,15 @@ class SquidstatMppt:
     def set_mppt_parameters(
             self,
             mppt_duration: float,
+            mppt_step_voltage_mV: float,
+            mppt_step_time_ms: float
     ) -> None:
         self.mppt_duration = mppt_duration
+        self.mppt_step_voltage = mppt_step_voltage_mV/1000
+        self.mppt_step_time = mppt_step_time_ms
+        self.Vo = None
+        self.Po = None
+        self.mppt_direction = 1
 
 
     def start_JV_scans(self) -> None:
@@ -133,7 +134,6 @@ class SquidstatMppt:
 
 
     def set_manual_mppt_voltage(self, channel: int, voltage: float) -> None:
-        print("Switching to constant voltage at 1V")
         error = self.handler.setManualModeConstantVoltage(channel, voltage)
         if error.value() != AisErrorCode.Success:
             print(error.message())
@@ -146,53 +146,55 @@ class SquidstatMppt:
                 print(error.message())
 
 
-    def start_mppt_experiment(self, channel: int) -> None:
-        print("Starting manual mode at open circuit potential")
-        error = self.handler.startManualExperiment(channel)
-        if error.value() != AisErrorCode.Success:
-            print(error.message())
+    def start_mppt_experiment(self) -> None:
+        assert(self.channel_data)
+        for (i, channel) in enumerate(self.channel_data):
+            # Setting sample interval for manual mppt experiment
+            error = self.handler.setManualModeSamplingInterval(i, self.mppt_step_time)
+            if error.value() != AisErrorCode.Success:
+                print(error.message())
+            
+            # Starting experiment
+            error = self.handler.startManualExperiment(i)
+            if error.value() != AisErrorCode.Success:
+                print(error.message())
 
-        # Set timer to stop the MPPT experiment
-        QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(channel))
+            error = self.handler.setManualModeConstantVoltage(i, channel.Vmpp)
+            if error.value() != AisErrorCode.Success:
+                print(error.message())
+
+            # Set timer to stop the MPPT experiment
+            QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
 
 
-    def preturb_and_observe(self, starting_voltage: float, channel: int)-> None:
-        dV = self.step_voltage
-        Vo = starting_voltage
-        direction = 1
+    def preturb_and_observe(self, channel: int, voltage: float, current: float, timestamp: float)-> None:
+        if self.Vo == None:
+            # Sets the initial values for P&O
+            self.Vo = voltage
+            self.Po = -1*voltage*current
+            V = voltage + self.mppt_direction * self.mppt_step_voltage
+            self.set_manual_mppt_voltage(channel, V)
+        else:
+            P = -1*voltage*current
 
-        self.start_mppt_experiment(channel)
-
-        with self.keithley as keithley:
-            io, to = self.measure_current(Vo, keithley, include_timestamp = True)
-            Po = -1*Vo*io
-            self.cell.append_data(Vo, io, to)
-
-            mpp_start = datetime.now()
-            while (datetime.now() - mpp_start).total_seconds() < self.mpp_duration:
-                V = Vo + direction*dV
-                i, t = self.measure_current(V, keithley, include_timestamp = True)
-                P = -1*V*i
-                
-                if P > Po:
-                    if V > Vo:
-                        direction = 1
-                    else:
-                        direction = -1
+            if P > self.Po:
+                if voltage > self.Vo:
+                    self.mppt_direction = 1
                 else:
-                    if V > Vo:
-                        direction = -1
-                    else:
-                        direction = 1
+                    self.mppt_direction = -1
+            else:
+                if voltage > self.Vo:
+                    self.mppt_direction = -1
+                else:
+                    self.mppt_direction = 1
 
-                self.cell.append_data(V, i, t)
-                Po = P
-                Vo = V 
+            self.Vo = voltage
+            self.Po = P
 
-            self.window.update_mppt_plot_data(self.cell, self.cell_area, self.solar_irradiance)
-            self.cell.format_mpp_results(self.cell_area, self.solar_irradiance, self.path)
+        self.channel_data[channel].append_data(voltage, current, timestamp)
 
 
+    # Function is called when a new experiment element starts
     def experiment_started(self, channel: int) -> None:
         if self.channel_data[channel].state == JV_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep started")
@@ -205,6 +207,24 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: DEAD STATE - SHOULD NOT BE STARTING AN EXPERIMENT")
 
 
+    # Function is called everytime data is collected from Squidstat
+    def data_received(self, channel: int, data) -> None:
+        if self.channel_data[channel].state == MPPT_STATE:
+            self.preturb_and_observe(
+                channel,
+                data.workingElectrodeVoltage,
+                data.current,
+                datetime.now()
+            )
+        else:
+            self.channel_data[channel].append_data(
+                data.workingElectrodeVoltage,
+                data.current,
+                datetime.now()
+            )
+
+
+    # Function is called when a channel finishes an experiment
     def experiment_finished(self, channel: int) -> None:
         # JV Sweeps finished. Compile data and proceed to held MPP state if all other channels are also finished.
         if self.channel_data[channel].state == JV_STATE:
@@ -221,7 +241,10 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
             if self.confirm_all_matching_states(self.main_state):
                 self.window.update_plot_data(self.channel_data)
-                self.start_const_voltage()
+                if self.main_state == CONST_V_STATE:
+                    self.start_const_voltage()
+                elif self.main_state == MPPT_STATE:
+                    self.start_mppt_experiment()
 
         # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
         elif self.channel_data[channel].state == self.main_state:
