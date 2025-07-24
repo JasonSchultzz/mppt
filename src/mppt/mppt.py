@@ -85,8 +85,8 @@ class MpptData:
         
         forward_data = self.compile_sweep_data(self.sweep_data_list[0], cell_area, solar_irradiance, step_voltage_mV, step_time_ms, scan_speed_mV_s)
         reverse_data = self.compile_sweep_data(self.sweep_data_list[1], cell_area, solar_irradiance, step_voltage_mV, step_time_ms, scan_speed_mV_s)
-        forward_data.to_csv(f"{path}/forward_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/forward_sweep_data.csv"))
-        reverse_data.to_csv(f"{path}/reverse_sweep_data.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_sweep_data.csv"))
+        forward_data.to_csv(f"{path}/forward_scan.csv", mode = "a", header = not os.path.exists(f"{path}/forward_scan.csv"))
+        reverse_data.to_csv(f"{path}/reverse_scan.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_scan.csv"))
 
         compiled_data = {
                 "Duration (min)": [],
@@ -308,7 +308,8 @@ class MpptData:
             self,
             cell_area: float,
             solar_irradiance: float,
-            directory: str
+            directory: str,
+            mpp_state: str
     ) -> None:
         if not self.voltage or not self.current:
             return
@@ -317,6 +318,7 @@ class MpptData:
         current_density = np.array(self.current)*1000/cell_area  # mA/cm2
         power_density = voltage*current_density
         efficiency = power_density*100/solar_irradiance
+        state = np.full(len(voltage), mpp_state)
         path = f"{directory}/{self.name}"
 
         compiled_data = pd.DataFrame({
@@ -324,9 +326,10 @@ class MpptData:
             "Voltage (V)": self.voltage,
             "Current Density (mA/cm2)": current_density,
             "Power Density (mW/cm2)": power_density,
-            "PCE (%)": efficiency
+            "PCE (%)": efficiency,
+            "MPP Format": state
         })
-        compiled_data.to_csv(f"{path}/mpp_data.csv", mode = "a", header = not os.path.exists(f"{path}/mpp_data.csv"))
+        compiled_data.to_csv(f"{path}/mppt_data.csv", mode = "a", header = not os.path.exists(f"{path}/mppt_data.csv"))
 
         # filename = f"{path}/data.xlsx"
         # try:

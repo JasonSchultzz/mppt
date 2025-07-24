@@ -105,7 +105,7 @@ class SquidstatMppt:
     ) -> None:
         self.mppt_duration = mppt_duration
         self.mppt_step_voltage = mppt_step_voltage_mV/1000
-        self.mppt_step_time = mppt_step_time_ms
+        self.mppt_step_time = mppt_step_time_ms/1000
         self.Vo = None
         self.Po = None
         self.mppt_direction = 1
@@ -140,7 +140,6 @@ class SquidstatMppt:
 
 
     def stop_mppt_experiment(self, channel: int) -> None:
-            print("Stopping experiment.")
             error = self.handler.stopExperiment(channel)
             if error.value() != AisErrorCode.Success:
                 print(error.message())
@@ -149,19 +148,20 @@ class SquidstatMppt:
     def start_mppt_experiment(self) -> None:
         assert(self.channel_data)
         for (i, channel) in enumerate(self.channel_data):
-            # Setting sample interval for manual mppt experiment
-            error = self.handler.setManualModeSamplingInterval(i, self.mppt_step_time)
-            if error.value() != AisErrorCode.Success:
-                print(error.message())
-            
             # Starting experiment
             error = self.handler.startManualExperiment(i)
+            if error.value() != AisErrorCode.Success:
+                print(error.message())
+
+            # Setting sample interval for manual mppt experiment
+            error = self.handler.setManualModeSamplingInterval(i, self.mppt_step_time)
             if error.value() != AisErrorCode.Success:
                 print(error.message())
 
             error = self.handler.setManualModeConstantVoltage(i, channel.Vmpp)
             if error.value() != AisErrorCode.Success:
                 print(error.message())
+            print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
 
             # Set timer to stop the MPPT experiment
             QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
@@ -190,6 +190,8 @@ class SquidstatMppt:
 
             self.Vo = voltage
             self.Po = P
+            V = voltage + self.mppt_direction * self.mppt_step_voltage
+            self.set_manual_mppt_voltage(channel, V)
 
         self.channel_data[channel].append_data(voltage, current, timestamp)
 
@@ -252,9 +254,10 @@ class SquidstatMppt:
             self.channel_data[channel].format_mpp_results(
                 self.cell_area,
                 self.solar_irradiance,
-                self.path
+                self.path,
+                self.main_state
             )
-            print(f"Time: {datetime.now()}, Channel {channel}: MPP duration elapsed")
+            print(f"Time: {datetime.now()}, Channel {channel}: MPPT duration elapsed")
             if self.confirm_all_matching_states(JV_STATE):
                 self.start_JV_scans()
 

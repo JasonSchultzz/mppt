@@ -15,7 +15,7 @@ from datetime import datetime
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from mppt.mppt import JV_SWEEP_STATE, MPP_STATE, DEAD_STATE, FORWARD_SCAN, REVERSE_SCAN, MpptData
+from mppt.mppt import FORWARD_SCAN, REVERSE_SCAN, MpptData
 
 
 GPIB = "GPIB::24"
