@@ -8,8 +8,7 @@ description = "A_short_description"
 dynamic = ["version"]
 
 readme = "README.md"
-requires-python = ">=3.8"
-license = {file = "LICENSE"}
+requires-python = ">=3.8, <=3.11"
 authors = [
   {email = "jason.schultz@hotmail.ca"},
   {name = "Jason Schultz"}
