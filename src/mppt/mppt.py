@@ -89,6 +89,7 @@ class MpptData:
         reverse_data.to_csv(f"{path}/reverse_scan.csv", mode = "a", header = not os.path.exists(f"{path}/reverse_scan.csv"))
 
         compiled_data = {
+                "Timestamp": [],
                 "Duration (min)": [],
                 "Direction": [],
                 "Normalized PCE": [],
@@ -257,6 +258,7 @@ class MpptData:
             raise ValueError(f"{scan_direction} is an incorrect direction entry for compiling JV data.")
         
         FF = Vmpp*Jmpp*100/(Voc*Jsc)
+        data["Timestamp"].append(datetime.now())
         data["Direction"].append(scan_direction)
         data["Duration (min)"].append(duration)
         data["Normalized PCE"].append(relative_efficiency)
