@@ -8,7 +8,7 @@
 """a_short_project_description"""
 # ---------------------------------------------------------------------------
 import sys
-from mppt.squidstat import SquidstatMppt
+from mppt.squidstat import SquidstatMppt, BASIC_P_AND_O, METASTABLE_P_AND_O
 from mppt.kiethley import KeithleyMppt, GPIB
 from mppt.mppt import CONST_V_STATE, MPPT_STATE
 from PySide6.QtWidgets import QApplication
@@ -70,7 +70,8 @@ def squid_main():
     manager.set_mppt_parameters(
         mppt_duration = 30,
         mppt_step_voltage_mV = 10,
-        mppt_step_time_ms = 300
+        mppt_step_time_ms = 300,
+        mppt_type = BASIC_P_AND_O
     )
     manager.start_JV_scans()
 

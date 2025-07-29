@@ -9,6 +9,8 @@ from mppt.mppt import JV_STATE, MPPT_STATE, CONST_V_STATE, DEAD_STATE, MpptData
 
 
 OUTPUT = "./output"
+BASIC_P_AND_O = 1
+METASTABLE_P_AND_O = 2
 
 
 class SquidstatMppt:
@@ -101,7 +103,8 @@ class SquidstatMppt:
             self,
             mppt_duration: float,
             mppt_step_voltage_mV: float,
-            mppt_step_time_ms: float
+            mppt_step_time_ms: float,
+            mppt_type: int = BASIC_P_AND_O
     ) -> None:
         self.mppt_duration = mppt_duration
         self.mppt_step_voltage = mppt_step_voltage_mV/1000
@@ -109,6 +112,11 @@ class SquidstatMppt:
         self.Vo = None
         self.Po = None
         self.mppt_direction = 1
+
+        if mppt_type == METASTABLE_P_AND_O:
+            self.call_routine_A = False
+        else:
+            pass
 
 
     def start_JV_scans(self) -> None:
@@ -192,6 +200,63 @@ class SquidstatMppt:
             self.Po = P
             V = voltage + self.mppt_direction * self.mppt_step_voltage
             self.set_manual_mppt_voltage(channel, V)
+
+        self.channel_data[channel].append_data(voltage, current, timestamp)
+
+
+    # From paper, DOI: https://doi.org/10.5796/electrochemistry.20-00022
+    # "Development of a New MPPT Method for PCE Measurement of Metastable PSC"
+    # x in the flow chart seems to be a tolerance value for dP/dt
+    def p_and_o_metastable_psc(
+            self,
+            channel: int,
+            voltage: float,
+            current: float,
+            timestamp: float,
+            tolerance: float
+    )-> None:
+        if self.Vo == None:
+            # Sets the initial values for P&O
+            self.Vo = voltage
+            self.Po = -1*voltage*current
+            V = voltage + self.mppt_step_voltage
+            self.set_manual_mppt_voltage(channel, V)
+            self.call_routine_A = True
+        elif self.call_routine_A:
+            P = -1*voltage*current
+            if np.abs((P/self.Po)*100 - 100) < tolerance:
+                self.call_routine_A = False
+                V = voltage + self.mppt_step_voltage
+                self.set_manual_mppt_voltage(channel, V)
+            self.Po = P
+            self.Vo = voltage
+        else:
+            P = -1*voltage*current
+
+            if P > self.Po:
+                if voltage <= self.Vo:
+                    self.Vo = voltage
+                    self.Po = P
+                    V = voltage - 2*self.mppt_step_voltage
+                    self.set_manual_mppt_voltage(channel, V)
+                    self.call_routine_A = True
+                else:
+                    self.Vo = voltage
+                    self.Po = P
+                    V = voltage + self.mppt_step_voltage
+                    self.set_manual_mppt_voltage(channel, V)
+            else:
+                if voltage > self.Vo:
+                    self.Vo = voltage
+                    self.Po = P
+                    V = voltage - 2*self.mppt_step_voltage
+                    self.set_manual_mppt_voltage(channel, V)
+                    self.call_routine_A = True
+                else:
+                    self.Vo = voltage
+                    self.Po = P
+                    V = voltage + self.mppt_step_voltage
+                    self.set_manual_mppt_voltage(channel, V)
 
         self.channel_data[channel].append_data(voltage, current, timestamp)
 

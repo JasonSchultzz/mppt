@@ -3,12 +3,14 @@ import pandas as pd
 from datetime import datetime
 import os
 
+
 JV_STATE = 0
 MPPT_STATE = 1
 CONST_V_STATE = 2
 DEAD_STATE = 3
 FORWARD_SCAN = "Forward"
 REVERSE_SCAN = "Reverse"
+
 
 class MpptData:
     def __init__(self, name: str) -> None:
@@ -318,7 +320,7 @@ class MpptData:
         
         voltage = np.array(self.voltage)
         current_density = np.array(self.current)*1000/cell_area  # mA/cm2
-        power_density = voltage*current_density
+        power_density = -1*voltage*current_density
         efficiency = power_density*100/solar_irradiance
         state = np.full(len(voltage), mpp_state)
         path = f"{directory}/{self.name}"

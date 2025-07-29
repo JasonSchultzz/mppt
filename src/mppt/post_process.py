@@ -20,11 +20,12 @@ def plot_mppt(directory: str) -> None:
 
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
-    ax1.scatter(timestamp, data["Voltage (V)"], color = "blue")
+    line1 = ax1.scatter(timestamp, data["Voltage (V)"], color = "blue", label = "Voltage")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("Voltage (V)")
-    ax2.scatter(timestamp, data["PCE (%)"], color = "orange")
+    line2 = ax2.scatter(timestamp, data["PCE (%)"], color = "orange", label = "PCE")
     ax2.set_ylabel("PCE (%)")
+    ax2.legend(handles = [line1, line2])
     plt.show()
 
 
@@ -46,6 +47,9 @@ def plot_JV_scans(directory: str) -> None:
 
     fscans = split_JV_scans(fdata)
     rscans = split_JV_scans(rdata)
+
+    fscans = fscans[int(len(fscans)/2):len(fscans)]
+    rscans = rscans[int(len(rscans)/2):len(rscans)]
 
     for (i, f) in enumerate(fscans):
         plt.plot(f["Voltage (V)"], f["Current Density (mA/cm2)"], label = f"FS {i+1}")
