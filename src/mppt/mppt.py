@@ -4,10 +4,11 @@ from datetime import datetime
 import os
 
 
-JV_STATE = 0
-MPPT_STATE = 1
-CONST_V_STATE = 2
-DEAD_STATE = 3
+JV_STATE = "JV"
+CONST_V_STATE = "Constant Voltage"
+P_AND_O_STATE = "Simple P&O"
+META_P_AND_O_STATE = "Metastable P&O"
+DEAD_STATE = "Dead"
 FORWARD_SCAN = "Forward"
 REVERSE_SCAN = "Reverse"
 

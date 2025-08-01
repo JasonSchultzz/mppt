@@ -8,10 +8,9 @@
 """a_short_project_description"""
 # ---------------------------------------------------------------------------
 import sys
-from mppt.squidstat import SquidstatMppt, BASIC_P_AND_O, METASTABLE_P_AND_O
 from mppt.kiethley import KeithleyMppt, GPIB
-from mppt.mppt import CONST_V_STATE, MPPT_STATE
 from PySide6.QtWidgets import QApplication
+from mppt.squidstat import SquidstatMppt, CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE
 
 
 def keithley_main():
@@ -45,16 +44,16 @@ def squid_main():
     app = QApplication()
     manager = SquidstatMppt(
         device_name = "Prime2809",
-        port = "COM11",
+        port = "COM3",
         year = "2025",
-        date = "07-24",
+        date = "07-31",
         fabricator = "Elnaz",
         channel_names = [
-            "07-24-epfl",
+            "08u-epfl",
             ],
         cell_area = 0.16,
         solar_irradiance = 100,
-        main_state = MPPT_STATE
+        main_state = META_P_AND_O_STATE
     )
     manager.set_JV_parameters(
         high_voltage = 1.2,
@@ -71,7 +70,7 @@ def squid_main():
         mppt_duration = 30,
         mppt_step_voltage_mV = 10,
         mppt_step_time_ms = 300,
-        mppt_type = BASIC_P_AND_O
+        tolerance = 0.01
     )
     manager.start_JV_scans()
 

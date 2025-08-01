@@ -67,8 +67,13 @@ def plot_compiled_results(directory: str) -> None:
     fdata = data.loc[data["Direction"] == "Forward"]
     rdata = data.loc[data["Direction"] == "Reverse"]
 
-    plt.scatter(fdata["Timestamp"], fdata["PCE (%)"], color = "blue", label = "FS")
-    plt.scatter(rdata["Timestamp"], rdata["PCE (%)"], color = "orange", label = "RS")
+    ftimestamp = convert_timestamp_to_datetime(np.array(fdata["Timestamp"]))
+    rtimestamp = convert_timestamp_to_datetime(np.array(rdata["Timestamp"]))
+
+    plt.scatter(ftimestamp, fdata["PCE (%)"], color = "blue", label = "FS")
+    plt.scatter(rtimestamp, rdata["PCE (%)"], color = "orange", label = "RS")
+    plt.xlabel("Time")
+    plt.ylabel("PCE (%)")
     plt.legend()
     plt.show()
 
@@ -76,7 +81,7 @@ def plot_compiled_results(directory: str) -> None:
 if __name__ == "__main__":
     fabricator = "Elnaz"
     year = "2025"
-    date = "07-24"
+    date = "07-31"
     cell_name = "08u-epfl"
     directory = f"./output/{fabricator}/{year}/{date}/{cell_name}"
 

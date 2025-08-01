@@ -5,12 +5,10 @@ from PySide6.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement, AisErrorCode
-from mppt.mppt import JV_STATE, MPPT_STATE, CONST_V_STATE, DEAD_STATE, MpptData
+from mppt.mppt import JV_STATE, CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE, DEAD_STATE, MpptData
 
 
 OUTPUT = "./output"
-BASIC_P_AND_O = 1
-METASTABLE_P_AND_O = 2
 
 
 class SquidstatMppt:
@@ -104,7 +102,7 @@ class SquidstatMppt:
             mppt_duration: float,
             mppt_step_voltage_mV: float,
             mppt_step_time_ms: float,
-            mppt_type: int = BASIC_P_AND_O
+            tolerance: float = 0.01
     ) -> None:
         self.mppt_duration = mppt_duration
         self.mppt_step_voltage = mppt_step_voltage_mV/1000
@@ -112,11 +110,7 @@ class SquidstatMppt:
         self.Vo = None
         self.Po = None
         self.mppt_direction = 1
-
-        if mppt_type == METASTABLE_P_AND_O:
-            self.call_routine_A = False
-        else:
-            pass
+        self.tolerance = tolerance
 
 
     def start_JV_scans(self) -> None:
@@ -169,7 +163,7 @@ class SquidstatMppt:
             error = self.handler.setManualModeConstantVoltage(i, channel.Vmpp)
             if error.value() != AisErrorCode.Success:
                 print(error.message())
-            print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
+            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f}")
 
             # Set timer to stop the MPPT experiment
             QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
@@ -264,11 +258,13 @@ class SquidstatMppt:
     # Function is called when a new experiment element starts
     def experiment_started(self, channel: int) -> None:
         if self.channel_data[channel].state == JV_STATE:
-            print(f"Time: {datetime.now()}, Channel {channel}: JV sweep started")
+            print(f"Time: {datetime.now()}, Channel {channel}: JV scans started")
             self.channel_data[channel].store()
         elif self.channel_data[channel].state == CONST_V_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: Constant voltage started at {self.channel_data[channel].Vmpp:.2f}")
-        elif self.channel_data[channel].state == MPPT_STATE:
+        elif self.channel_data[channel].state == P_AND_O_STATE:
+            print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
+        elif self.channel_data[channel].state == META_P_AND_O_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
         else:  # Dead state
             print(f"Time: {datetime.now()}, Channel {channel}: DEAD STATE - SHOULD NOT BE STARTING AN EXPERIMENT")
@@ -276,12 +272,20 @@ class SquidstatMppt:
 
     # Function is called everytime data is collected from Squidstat
     def data_received(self, channel: int, data) -> None:
-        if self.channel_data[channel].state == MPPT_STATE:
+        if self.channel_data[channel].state == P_AND_O_STATE:
             self.preturb_and_observe(
                 channel,
                 data.workingElectrodeVoltage,
                 data.current,
                 datetime.now()
+            )
+        elif self.channel_data[channel].state == META_P_AND_O_STATE:
+            self.p_and_o_metastable_psc(
+                channel,
+                data.workingElectrodeVoltage,
+                data.current,
+                datetime.now(),
+                self.tolerance
             )
         else:
             self.channel_data[channel].append_data(
@@ -310,7 +314,7 @@ class SquidstatMppt:
                 self.window.update_plot_data(self.channel_data)
                 if self.main_state == CONST_V_STATE:
                     self.start_const_voltage()
-                elif self.main_state == MPPT_STATE:
+                elif (self.main_state == P_AND_O_STATE) or (self.main_state == META_P_AND_O_STATE):
                     self.start_mppt_experiment()
 
         # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
