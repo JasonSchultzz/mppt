@@ -309,7 +309,7 @@ class SquidstatMppt:
                 self.step_time*1000,
                 self.scan_speed
             )
-            print(f"Time: {datetime.now()}, Channel {channel}: JV sweep complete")
+            print(f"Time: {datetime.now()}, Channel {channel}: JV scans complete")
             if self.confirm_all_matching_states(self.main_state):
                 self.window.update_plot_data(self.channel_data)
                 if self.main_state == CONST_V_STATE:
@@ -319,7 +319,6 @@ class SquidstatMppt:
 
         # MPP duration elasped. Proceed to JV sweeps if all other channels are also finished.
         elif self.channel_data[channel].state == self.main_state:
-            self.channel_data[channel].state = JV_STATE
             self.channel_data[channel].format_mpp_results(
                 self.cell_area,
                 self.solar_irradiance,
@@ -327,7 +326,9 @@ class SquidstatMppt:
                 self.main_state
             )
             print(f"Time: {datetime.now()}, Channel {channel}: MPPT duration elapsed")
+            self.channel_data[channel].state = JV_STATE
             if self.confirm_all_matching_states(JV_STATE):
+                print("All MPP durations elapsed. Starting JV scans.")
                 self.start_JV_scans()
 
         # Dead state
