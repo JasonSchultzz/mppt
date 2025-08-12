@@ -138,35 +138,39 @@ class SquidstatMppt:
     def set_manual_mppt_voltage(self, channel: int, voltage: float) -> None:
         error = self.handler.setManualModeConstantVoltage(channel, voltage)
         if error.value() != AisErrorCode.Success:
-            print(error.message())
+            print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
 
 
-    def stop_mppt_experiment(self, channel: int) -> None:
+    def stop_mppt_experiment(self, channel: int, timer: QTimer) -> None:
+            timer.stop()
             error = self.handler.stopExperiment(channel)
             if error.value() != AisErrorCode.Success:
-                print(error.message())
+                print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
 
 
     def start_mppt_experiment(self) -> None:
         assert(self.channel_data)
+        timer: list[QTimer] = []
         for (i, channel) in enumerate(self.channel_data):
             # Starting experiment
             error = self.handler.startManualExperiment(i)
             if error.value() != AisErrorCode.Success:
-                print(error.message())
+                print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
             # Setting sample interval for manual mppt experiment
             error = self.handler.setManualModeSamplingInterval(i, self.mppt_step_time)
             if error.value() != AisErrorCode.Success:
-                print(error.message())
+                print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
             error = self.handler.setManualModeConstantVoltage(i, channel.Vmpp)
             if error.value() != AisErrorCode.Success:
-                print(error.message())
-            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f}")
+                print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
+            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V")
             # Set timer to stop the MPPT experiment
-            QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
+            timer.append(QTimer())
+            timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+            timer[i].start(self.mppt_duration*1000)
 
 
     def preturb_and_observe(self, channel: int, voltage: float, current: float, timestamp: float)-> None:
@@ -258,7 +262,7 @@ class SquidstatMppt:
     # Function is called when a new experiment element starts
     def experiment_started(self, channel: int) -> None:
         if self.channel_data[channel].state == JV_STATE:
-            print(f"Time: {datetime.now()}, Channel {channel}: JV scans started")
+            print(f"Time: {datetime.now()}, Channel {channel}: JV scan started")
             self.channel_data[channel].store()
         elif self.channel_data[channel].state == CONST_V_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: Constant voltage started at {self.channel_data[channel].Vmpp:.2f}")
@@ -309,8 +313,9 @@ class SquidstatMppt:
                 self.step_time*1000,
                 self.scan_speed
             )
-            print(f"Time: {datetime.now()}, Channel {channel}: JV scans complete")
+            print(f"Time: {datetime.now()}, Channel {channel}: JV scan complete")
             if self.confirm_all_matching_states(self.main_state):
+                print(f"Time: {datetime.now()}, All JV scans complete")
                 self.window.update_plot_data(self.channel_data)
                 if self.main_state == CONST_V_STATE:
                     self.start_const_voltage()
@@ -328,7 +333,7 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: MPPT duration elapsed")
             self.channel_data[channel].state = JV_STATE
             if self.confirm_all_matching_states(JV_STATE):
-                print("All MPP durations elapsed. Starting JV scans.")
+                print(f"Time: {datetime.now()}, All MPP durations elapsed. Starting JV scans")
                 self.start_JV_scans()
 
         # Dead state
@@ -339,7 +344,9 @@ class SquidstatMppt:
 
 
     def confirm_all_matching_states(self, state: int) -> bool:
+        print("Channel States: ")
         for channel in self.channel_data:
+            print(f"  {channel.name}: {channel.state}")
             if channel.state != state:
                 return False
         return True
