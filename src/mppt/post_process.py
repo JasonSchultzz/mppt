@@ -48,8 +48,8 @@ def plot_JV_scans(directory: str) -> None:
     fscans = split_JV_scans(fdata)
     rscans = split_JV_scans(rdata)
 
-    fscans = fscans[int(len(fscans)/2):len(fscans)]
-    rscans = rscans[int(len(rscans)/2):len(rscans)]
+    # fscans = fscans[int(len(fscans)/2):len(fscans)]
+    # rscans = rscans[int(len(rscans)/2):len(rscans)]
 
     for (i, f) in enumerate(fscans):
         plt.plot(f["Voltage (V)"], f["Current Density (mA/cm2)"], label = f"FS {i+1}")
@@ -81,10 +81,10 @@ def plot_compiled_results(directory: str) -> None:
 if __name__ == "__main__":
     fabricator = "Elnaz"
     year = "2025"
-    date = "07-31"
-    cell_name = "08u-epfl"
+    date = "08-14"
+    cell_name = "06u-epfl"
     directory = f"./output/{fabricator}/{year}/{date}/{cell_name}"
 
-    # plot_mppt(directory)
-    plot_JV_scans(directory)
+    plot_mppt(directory)
+    # plot_JV_scans(directory)
     # plot_compiled_results(directory)

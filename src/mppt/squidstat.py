@@ -166,11 +166,14 @@ class SquidstatMppt:
             if error.value() != AisErrorCode.Success:
                 print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
-            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V")
+            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
             # Set timer to stop the MPPT experiment
-            timer.append(QTimer())
-            timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
-            timer[i].start(self.mppt_duration*1000)
+            # timer.append(QTimer())
+            # timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+            # timer[i].start(self.mppt_duration*1000)
+            timer = QTimer()
+            timer.timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+            timer.start(self.mppt_duration*1000)
 
 
     def preturb_and_observe(self, channel: int, voltage: float, current: float, timestamp: float)-> None:
@@ -265,7 +268,7 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: JV scan started")
             self.channel_data[channel].store()
         elif self.channel_data[channel].state == CONST_V_STATE:
-            print(f"Time: {datetime.now()}, Channel {channel}: Constant voltage started at {self.channel_data[channel].Vmpp:.2f}")
+            print(f"Time: {datetime.now()}, Channel {channel}: Constant voltage started at {self.channel_data[channel].Vmpp:.2f} for {self.const_voltage_duration} seconds.")
         elif self.channel_data[channel].state == P_AND_O_STATE:
             print(f"Time: {datetime.now()}, Channel {channel}: MPPT started at {self.channel_data[channel].Vmpp:.2f}")
         elif self.channel_data[channel].state == META_P_AND_O_STATE:

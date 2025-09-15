@@ -46,10 +46,10 @@ def squid_main():
         device_name = "Prime2809",
         port = "COM3",
         year = "2025",
-        date = "07-31",
-        fabricator = "Elnaz",
+        date = "09-15",
+        fabricator = "Abraha",
         channel_names = [
-            "08u-epfl",
+            "03u-epfl",
             ],
         cell_area = 0.16,
         solar_irradiance = 100,
@@ -63,14 +63,14 @@ def squid_main():
         jv_sample_rate_modifier = 1
     )
     manager.set_const_voltage_parameters(
-        duration = 30,
+        duration = 120,
         sample_interval = 1
     )
     manager.set_mppt_parameters(
-        mppt_duration = 30,
+        mppt_duration = 120,
         mppt_step_voltage_mV = 10,
         mppt_step_time_ms = 300,
-        tolerance = 0.01
+        tolerance = 0.5
     )
     manager.start_JV_scans()
 
