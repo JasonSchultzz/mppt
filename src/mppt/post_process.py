@@ -79,12 +79,12 @@ def plot_compiled_results(directory: str) -> None:
 
 
 if __name__ == "__main__":
-    fabricator = "Elnaz"
+    fabricator = "Abraha"
     year = "2025"
-    date = "08-14"
-    cell_name = "06u-epfl"
+    date = "09-15"
+    cell_name = "03u-epfl"
     directory = f"./output/{fabricator}/{year}/{date}/{cell_name}"
 
-    plot_mppt(directory)
-    # plot_JV_scans(directory)
+    # plot_mppt(directory)
+    plot_JV_scans(directory)
     # plot_compiled_results(directory)

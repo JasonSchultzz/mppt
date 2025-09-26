@@ -167,13 +167,16 @@ class SquidstatMppt:
                 print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
             print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
+            
             # Set timer to stop the MPPT experiment
-            # timer.append(QTimer())
-            # timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
-            # timer[i].start(self.mppt_duration*1000)
-            timer = QTimer()
-            timer.timeout.connect(self.stop_mppt_experiment(i, timer[i]))
-            timer.start(self.mppt_duration*1000)
+            if len(self.channel_data > 1):
+                # NOTE: singleShot doesn't seem to work when multiple channels are used
+                timer.append(QTimer())
+                timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+                timer[i].start(self.mppt_duration*1000)
+            else:
+                # NOTE: Appending only 1 QTimer to the list above does not seem to work?
+                QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
 
 
     def preturb_and_observe(self, channel: int, voltage: float, current: float, timestamp: float)-> None:

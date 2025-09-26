@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from dataclasses import dataclass
 import os
+import toml
 
 
 JV_STATE = "JV"
@@ -347,3 +349,35 @@ class MpptData:
         self.timestamp = []
         self.voltage = []
         self.current = []
+
+
+@dataclass
+class InputData:
+    def __init__(self, file: str):
+        with open(file, "r") as f:
+            config = toml.load(f)
+
+        self.device_name = config["device"]["name"]
+        self.device_port = config["device"]["port"]
+
+        self.fabricator = config["cell"]["fabricator"]
+        self.year = config["cell"]["year"]
+        self.date = config["cell"]["date"]
+        self.cell_names = config["cell"]["names"]
+        self.cell_area = config["cell"]["aperture_area"]
+        self.irradiance = config["cell"]["solar_irradiance"]
+
+        self.high_voltage = config["experiment"]["high_voltage"]
+        self.low_voltage = config["experiment"]["low_voltage"]
+        self.jv_step_voltage_mV = config["experiment"]["jv_step_voltage_mV"]
+        self.jv_step_time_ms = config["experiment"]["jv_step_time_ms"]
+        self.jv_sample_rate_modifier = config["experiment"]["jv_sample_rate_modifier"]
+        self.mppt_method = config["experiment"]["mppt_method"]
+
+        self.constv_duration = config["constant_voltage"]["duration"]
+        self.constv_sample_interval = config["constant_voltage"]["sample_interval"]
+
+        self.mppt_duration = config["mppt"]["duration"]
+        self.mppt_step_voltage_mV = config["mppt"]["step_voltage_mV"]
+        self.mppt_step_time_ms = config["mppt"]["step_time_ms"]
+        self.mppt_tolerance = config["mppt"]["tolerance"]

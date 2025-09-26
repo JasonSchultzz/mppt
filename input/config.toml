@@ -1,0 +1,44 @@
+# Potentiostat setup
+[device]
+name = "Prime2809"          # Name of the potentiostat to be used in code
+com = "COM3"                # Port where potentiostat is plugged into PC. Confirm correct under Device Manager
+
+# Cell/device information
+[cell]
+fabricator = "Abraha"
+year = "2025"
+date = "09-15"
+names = ["03u-epfl"]        # list of size 1 to 4 of the name of each cell to test
+aperture_area = 0.16        # cm2
+solar_irradiance = 100      # mW/cm2
+
+# Experiment information
+[experiment]
+high_voltage = 1.2          # V
+low_voltage = -0.2          # V
+jv_step_voltage_mV = 10
+jv_step_time_ms = 100
+jv_sample_rate_modifier = 1
+
+# Determine what test is going to be done inbetween JV scans. CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE
+# Options include:
+#     "CONST_V_STATE": Keeps the cell at a set voltage based on previous JV scan Vmpp
+#     "P_AND_O_STATE": Simple Pertrub and Observe MPPT algorithm. Changes voltage from JV scan
+#                      Vmpp up or down based on measured increase or decrease in PCE
+#     "META_PAND_O_STATE": Modified Perturb and Observe MPPT algorithm to try and reduce hysteresis oscillations
+#                          due to changing scan directions. Holds at set voltage until PCE stabilizes below
+#                          set tolerance. Reduces hysteresis effects by mainly using forward scanning. If reverse
+#                          scan is needed, it goes back 2 voltage increments, then increases by 1.
+mppt_method = "META_P_AND_O_STATE"
+
+# CONST_V_STATE
+[constant_voltage]
+duration = 120              # seconds
+sample_interval = 1         # seconds
+
+# P_AND_O_STATE and META_PAND_O_STATE
+[mppt]
+duration = 120              # seconds
+step_voltage_mV = 10   
+step_time_ms = 300
+tolerance = 0.5             # % (used for META_P_AND_O_STATE)
