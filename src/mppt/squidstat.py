@@ -141,8 +141,9 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
 
 
-    def stop_mppt_experiment(self, channel: int, timer: QTimer) -> None:
-            timer.stop()
+    def stop_mppt_experiment(self, channel: int, timer: QTimer | None = None) -> None:
+            if timer is not None:
+                timer.stop()
             error = self.handler.stopExperiment(channel)
             if error.value() != AisErrorCode.Success:
                 print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
@@ -169,11 +170,12 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
             
             # Set timer to stop the MPPT experiment
-            if len(self.channel_data > 1):
+            if len(self.channel_data) > 1:
                 # NOTE: singleShot doesn't seem to work when multiple channels are used
                 timer.append(QTimer())
-                timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+                print(f"Timer {i} started.")
                 timer[i].start(self.mppt_duration*1000)
+                timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
             else:
                 # NOTE: Appending only 1 QTimer to the list above does not seem to work?
                 QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))

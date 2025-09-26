@@ -11,6 +11,8 @@ import sys
 from mppt.kiethley import KeithleyMppt, GPIB
 from PySide6.QtWidgets import QApplication
 from mppt.squidstat import SquidstatMppt, CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE
+from mppt.mppt import InputData
+from PySide6.QtCore import QTimer
 
 
 def keithley_main():
@@ -46,10 +48,10 @@ def squid_main():
         device_name = "Prime2809",
         port = "COM3",
         year = "2025",
-        date = "09-15",
-        fabricator = "Abraha",
+        date = "09-26",
+        fabricator = "Elnaz",
         channel_names = [
-            "03u-epfl",
+            "04d",
             ],
         cell_area = 0.16,
         solar_irradiance = 100,
@@ -67,7 +69,7 @@ def squid_main():
         sample_interval = 1
     )
     manager.set_mppt_parameters(
-        mppt_duration = 120,
+        mppt_duration = 240,
         mppt_step_voltage_mV = 10,
         mppt_step_time_ms = 300,
         tolerance = 0.5
@@ -75,6 +77,15 @@ def squid_main():
     manager.start_JV_scans()
 
     sys.exit(app.exec())
+
+
+def timer_test():
+    timer: list[QTimer] = []
+    for (i, v) in enumerate([0, 1, 2, 3]):
+        timer.append(QTimer())
+        print(f"Timer {i} started.")
+        timer[i].timeout.connect(print(f"Timer {i} Finished"))
+        timer[i].start(30*1000)
 
 
 if __name__ == "__main__":
