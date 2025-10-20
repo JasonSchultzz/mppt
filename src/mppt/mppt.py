@@ -353,7 +353,33 @@ class MpptData:
 
 @dataclass
 class InputData:
-    def __init__(self, file: str):
+    device_name: str
+    device_port: str
+
+    fabricator: str
+    year: str
+    date: str
+    cell_names: list[str]
+    cell_area: float | int
+    irradiance: float | int
+
+    high_voltage: float | int
+    low_voltage: float | int
+    jv_step_voltage_mV: float | int
+    jv_step_time_ms: int
+    jv_sample_rate_modifier: int
+    mppt_method: str
+
+    constv_duration: int
+    constv_sample_interval: float | int
+
+    mppt_duration: int
+    mppt_step_voltage_mV: float | int
+    mppt_step_time_ms: int
+    mppt_tolerance: float | int
+
+
+    def __init__(self, file: str) -> None:
         with open(file, "r") as f:
             config = toml.load(f)
 
@@ -381,3 +407,56 @@ class InputData:
         self.mppt_step_voltage_mV = config["mppt"]["step_voltage_mV"]
         self.mppt_step_time_ms = config["mppt"]["step_time_ms"]
         self.mppt_tolerance = config["mppt"]["tolerance"]
+
+        self.validate()
+
+
+    def validate(self):
+        if not isinstance(self.device_name, str):
+            raise ValueError(f"Device Name '{self.device_name}' must be a string.")
+        if not isinstance(self.device_port, str):
+            raise ValueError(f"Device Port '{self.device_port}' must be a string.")
+        
+        if not isinstance(self.fabricator, str):
+            raise ValueError(f"Fabricator '{self.fabricator}' must be a string.")
+        if not isinstance(self.year, str):
+            raise ValueError("Year must be a string.")
+        if not isinstance(self.date, str):
+            raise ValueError("Date must be a string.")
+        if not isinstance(self.cell_names, list):
+            raise ValueError("Cell Names must be a string.")
+        for name in self.cell_names:
+            if not isinstance(name, str):
+                raise ValueError(f"Cell name '{name}' must be a string.")
+        if not isinstance(self.cell_area, (float, int)):
+            raise ValueError(f"Cell area '{self.cell_area}' must be a float or integer.")
+        if not isinstance(self.irradiance, (float, int)):
+            raise ValueError(f"Irradiance '{self.irradiance}' must be a float or integer.")
+        
+        if not isinstance(self.high_voltage, (float, int)):
+            raise ValueError(f"High voltage '{self.high_voltage}' must be a float or integer.")
+        if not isinstance(self.low_voltage, (float, int)):
+            raise ValueError(f"Low voltage '{self.low_voltage}' must be a float or integer.")
+
+        if not isinstance(self.jv_step_voltage_mV, (float, int)):
+            raise ValueError(f"JV step voltage '{self.jv_step_voltage_mV}' must be a float or integer.")
+        if not isinstance(self.jv_step_time_ms, int):
+            raise ValueError(f"JV step time '{self.jv_step_time_ms}' must be a integer.")
+        if not isinstance(self.jv_sample_rate_modifier, int):
+            raise ValueError(f"JV sample rate modifier '{self.jv_sample_rate_modifier}' must be a integer.")
+        if (self.mppt_method != CONST_V_STATE) and (self.mppt_method != P_AND_O_STATE) and (self.mppt_method != META_P_AND_O_STATE):
+            raise ValueError(f"Invalid MPPT method '{self.mppt_method}'. Viable options are:\n  {CONST_V_STATE}\n  {P_AND_O_STATE}\n  {META_P_AND_O_STATE}")
+        
+        if not isinstance(self.constv_duration, int):
+            raise ValueError(f"Constant voltage duration '{self.constv_duration}' must be a integer.")
+        if not isinstance(self.constv_sample_interval, (float, int)):
+            raise ValueError(f"Constant voltage sample interval'{self.constv_sample_interval}' must be a float or integer.")
+        
+        if not isinstance(self.mppt_duration, int):
+            raise ValueError(f"MPPT duration '{self.mppt_duration}' must be a integer.")
+        if not isinstance(self.mppt_step_voltage_mV, (float, int)):
+            raise ValueError(f"MPPT step voltage '{self.mppt_step_voltage_mV}' must be a float or integer.")
+        if not isinstance(self.mppt_step_time_ms, int):
+            raise ValueError(f"MPPT step time '{self.mppt_step_time_ms}' must be a integer.")
+        if not isinstance(self.mppt_tolerance, (float, int)):
+            raise ValueError(f"MPPT tolerance '{self.mppt_tolerance}' must be a float or integer.")

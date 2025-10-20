@@ -5,7 +5,7 @@ from PySide6.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from SquidstatPyLibrary import AisDeviceTracker, AisExperiment, AisSteppedVoltageElement, AisConstantPotElement, AisErrorCode
-from mppt.mppt import JV_STATE, CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE, DEAD_STATE, MpptData
+from mppt.mppt import JV_STATE, CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE, DEAD_STATE, MpptData, InputData
 
 
 OUTPUT = "./output"
@@ -14,34 +14,50 @@ OUTPUT = "./output"
 class SquidstatMppt:
     def __init__(
             self,
-            device_name: str,
-            port: str,
-            year: str,
-            date: str,
-            fabricator: str,
-            channel_names: list[str],
-            cell_area: float,
-            solar_irradiance: float,
-            main_state: str = CONST_V_STATE
+            config: InputData
     ) -> None:
-        assert(len(channel_names) <= 4)
+        if not isinstance(config, InputData):
+            raise ValueError("Input data was not inputted correctly as the 'InputData' object.")
+
+        assert(len(config.cell_names) <= 4)
         self.channel_data: list[MpptData] = []
-        for channel_name in channel_names:
+        for channel_name in config.cell_names:
             self.channel_data.append(MpptData(channel_name))
 
         self.window = SquidPlotter()
         self.window.show()
 
-        self.cell_area = cell_area
-        self.solar_irradiance = solar_irradiance
-        self.main_state = main_state
+        self.cell_area = config.cell_area
+        self.solar_irradiance = config.irradiance
+        self.main_state = config.mppt_method
 
-        self.path = f"{OUTPUT}/{fabricator}/{year}/{date}"
+        self.path = f"{OUTPUT}/{config.fabricator}/{config.year}/{config.date}"
         self.tracker = AisDeviceTracker.Instance()
         self.tracker.newDeviceConnected.connect(lambda deviceName: print("Device is Connected: %s" % deviceName))
-        self.tracker.connectToDeviceOnComPort(port)
-        self.handler = self.tracker.getInstrumentHandler(device_name)
+        self.tracker.connectToDeviceOnComPort(config.device_port)
+        self.handler = self.tracker.getInstrumentHandler(config.device_name)
+        self.connect()
 
+        self.set_JV_parameters(
+            high_voltage = config.high_voltage,
+            low_voltage = config.low_voltage,
+            step_voltage_mV = config.jv_step_voltage_mV,
+            step_time_ms = config.jv_step_time_ms,
+            jv_sample_rate_modifier = config.jv_sample_rate_modifier
+        )
+        self.set_mppt_parameters(
+            mppt_duration = config.mppt_duration,
+            mppt_step_voltage_mV = config.mppt_step_voltage_mV,
+            mppt_step_time_ms = config.mppt_step_time_ms,
+            tolerance = config.mppt_tolerance
+        )
+        self.set_const_voltage_parameters(
+            duration = config.constv_duration,
+            sample_interval = config.constv_sample_interval
+        )
+
+
+    def connect(self) -> None:
         # What occurs when a new expierment is started
         self.handler.experimentNewElementStarting.connect(lambda channel, data: self.experiment_started(channel))
         
@@ -70,7 +86,7 @@ class SquidstatMppt:
             low_voltage: float,
             step_voltage_mV: float,
             step_time_ms: float,
-            jv_sample_rate_modifier: float = 1
+            jv_sample_rate_modifier: int = 1
     ) -> None:
         self.step_time = step_time_ms/1000
         sample_interval = self.step_time*jv_sample_rate_modifier
@@ -141,12 +157,18 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
 
 
-    def stop_mppt_experiment(self, channel: int, timer: QTimer | None = None) -> None:
-            if timer is not None:
-                timer.stop()
+    def stop_mppt_experiment(self, channel: int) -> None:
             error = self.handler.stopExperiment(channel)
             if error.value() != AisErrorCode.Success:
                 print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
+
+
+    def set_timer(self, channel: int, delay_ms: float) -> QTimer:
+        timer = QTimer()
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self.stop_mppt_experiment(channel))
+        timer.start(delay_ms)
+        return timer
 
 
     def start_mppt_experiment(self) -> None:
@@ -172,10 +194,7 @@ class SquidstatMppt:
             # Set timer to stop the MPPT experiment
             if len(self.channel_data) > 1:
                 # NOTE: singleShot doesn't seem to work when multiple channels are used
-                timer.append(QTimer())
-                print(f"Timer {i} started.")
-                timer[i].start(self.mppt_duration*1000)
-                timer[i].timeout.connect(self.stop_mppt_experiment(i, timer[i]))
+                timer.append(self.set_timer(i, self.mppt_duration*1000))
             else:
                 # NOTE: Appending only 1 QTimer to the list above does not seem to work?
                 QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))

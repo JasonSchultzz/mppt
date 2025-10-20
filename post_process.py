@@ -20,12 +20,14 @@ def plot_mppt(directory: str) -> None:
 
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
-    line1 = ax1.scatter(timestamp, data["Voltage (V)"], color = "blue", label = "Voltage")
+    # line1 = ax1.scatter(timestamp, data["Voltage (V)"], color = "blue", label = "Voltage")
+    line1 = ax1.plot(timestamp, data["Voltage (V)"], color = "blue", label = "Voltage")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("Voltage (V)")
-    line2 = ax2.scatter(timestamp, data["PCE (%)"], color = "orange", label = "PCE")
+    # line2 = ax2.scatter(timestamp, data["PCE (%)"], color = "orange", label = "PCE")
+    line2 = ax2.plot(timestamp, data["PCE (%)"], color = "orange", label = "PCE")
     ax2.set_ylabel("PCE (%)")
-    ax2.legend(handles = [line1, line2])
+    # ax2.legend(handles = [line1, line2])
     plt.show()
 
 
@@ -79,12 +81,12 @@ def plot_compiled_results(directory: str) -> None:
 
 
 if __name__ == "__main__":
-    fabricator = "Abraha"
+    fabricator = "Elnaz"
     year = "2025"
-    date = "09-15"
-    cell_name = "03u-epfl"
+    date = "09-26"
+    cell_name = "04d"
     directory = f"./output/{fabricator}/{year}/{date}/{cell_name}"
 
-    # plot_mppt(directory)
-    plot_JV_scans(directory)
+    plot_mppt(directory)
+    # plot_JV_scans(directory)
     # plot_compiled_results(directory)
