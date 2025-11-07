@@ -1,44 +1,69 @@
 # Potentiostat setup
 [device]
-name = "Prime2809"          # Name of the potentiostat to be used in code
-port = "COM3"                # Port where potentiostat is plugged into PC. Confirm correct under Device Manager
+# Name of the potentiostat to be used in code as a String
+name = "Prime2809"
+# Port where potentiostat is plugged into PC as a String. Confirm correct under Device Manager
+port = "COM3"
 
 # Cell/device information
 [cell]
-fabricator = "Abraha"
+ # Name of the person who fabricated the device as a String
+fabricator = "TEST"
+# Year of fabrication or test date as a String
 year = "2025"
-date = "09-15"
-names = ["03u-epfl"]        # list of size 1 to 4 of the name of each cell to test
-aperture_area = 0.16        # cm2
-solar_irradiance = 100      # mW/cm2
+# Date of fabrication or test as a String
+date = "10-20"
+# names assigns names for each individual cell to be tested.
+# This is a list of String values that can be in the range of 1 to 4 cells long,
+#   otherwise the code will probably not run properly.
+# NOTE: My code currently works in assigning the order of these named cells starting from Channel 1.
+#       Please make sure that devices are plugged in starting at Channel 1 and up.
+#       Any channels plugged into devices that are not named in this variable will not run.
+names = ["mpo1", "mpo2"]
+# Aperture area of the shadow mask applied in cm2 (Float or Integer)
+aperture_area = 0.16
+# Solar irradiance of the simulator in mW/cm2 (Float or Integer)        
+solar_irradiance = 100
 
 # Experiment information
 [experiment]
-high_voltage = 1.2          # V
-low_voltage = -0.2          # V
+# High end range of the max applied voltage of potentiostat in Volts (Float or Integer)
+high_voltage = 1.2
+# Low end range of the max applied voltage of potentiostat in Volts (Float or Integer)          
+low_voltage = -0.2
+# Incremental step in voltage during JV scans in mV (Float or Integer)          
 jv_step_voltage_mV = 10
-jv_step_time_ms = 100
-jv_sample_rate_modifier = 1
+# How long before stepping up the voltage in ms (Integer only)
+jv_step_time_ms = 100           
+# How many measurements are done per voltage step (Integer only). Default is 1
+jv_sample_rate_modifier = 1     
 
-# Determine what test is going to be done inbetween JV scans. CONST_V_STATE, P_AND_O_STATE, META_P_AND_O_STATE
+# Determine what test is going to be done inbetween JV scans.
 # Options include:
-#     "Constant Voltage": Keeps the cell at a set voltage based on previous JV scan Vmpp
-#     "Simple P&O": Simple Pertrub and Observe MPPT algorithm. Changes voltage from JV scan
-#                      Vmpp up or down based on measured increase or decrease in PCE
-#     "Metastable P&O": Modified Perturb and Observe MPPT algorithm to try and reduce hysteresis oscillations
-#                          due to changing scan directions. Holds at set voltage until PCE stabilizes below
-#                          set tolerance. Reduces hysteresis effects by mainly using forward scanning. If reverse
-#                          scan is needed, it goes back 2 voltage increments, then increases by 1.
-mppt_method = "Constant Voltage"
+#   "Constant Voltage": Keeps the cell at a set voltage based on previous JV scan Vmpp
+#   "Simple P&O": Simple Pertrub and Observe MPPT algorithm. Changes voltage from JV scan
+#                 Vmpp up or down based on measured increase or decrease in PCE
+#   "Metastable P&O": Modified Perturb and Observe MPPT algorithm to try and reduce hysteresis oscillations
+#                     due to changing scan directions. Holds at set voltage until PCE stabilizes below
+#                     set tolerance. Reduces hysteresis effects by mainly using forward scanning. If reverse
+#                     scan is needed, it goes back 2 voltage increments, then increases by 1.
+mppt_method = "Metastable P&O"
 
 # CONST_V_STATE
 [constant_voltage]
-duration = 120              # seconds
-sample_interval = 1         # seconds
+# How long the constant voltage state is applied between JV scans in seconds. (Integer only)
+duration = 10
+# Duration between each measurement taken during constant voltage state in seconds. (Integer only)
+sample_interval = 1
 
-# P_AND_O_STATE and META_PAND_O_STATE
+# Simple P&O and Metastable P&O options
 [mppt]
-duration = 120              # seconds
-step_voltage_mV = 10   
+# Duration of the mppt procedure between JV scans in seconds (Integer only)
+duration = 10
+# Change in voltage pertubation during mppt in mV (Float or Integer)
+step_voltage_mV = 10
+# Duration before perturbing the voltage again in ms (Integer only)
 step_time_ms = 300
-tolerance = 0.5             # % (used for Metastable P&O)
+# Used in the Metastable P&O algorithm. Allows PCE to settle before perturbing voltage again
+# Will start perturbing voltage after PCE is within X% of previous PCE measurement (Float or Integer)
+tolerance = 0.5
