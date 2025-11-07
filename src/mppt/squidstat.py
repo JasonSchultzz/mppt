@@ -157,7 +157,8 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
 
 
-    def stop_mppt_experiment(self, channel: int) -> None:
+    def stop_mppt_experiment(self, channel: int, timer: QTimer) -> None:
+            timer.stop()
             error = self.handler.stopExperiment(channel)
             if error.value() != AisErrorCode.Success:
                 print(f"Time: {datetime.now()}, Channel {channel}: {error.message()}")
@@ -166,7 +167,7 @@ class SquidstatMppt:
     def set_timer(self, channel: int, delay_ms: float) -> QTimer:
         timer = QTimer()
         timer.setSingleShot(True)
-        timer.timeout.connect(lambda: self.stop_mppt_experiment(channel))
+        timer.timeout.connect(lambda: self.stop_mppt_experiment(channel, timer))
         timer.start(delay_ms)
         return timer
 
