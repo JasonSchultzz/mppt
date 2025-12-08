@@ -1,6 +1,6 @@
 import numpy as np
 from datetime import datetime
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QGridLayout
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QGridLayout, QMessageBox
 from PySide6.QtCore import QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -380,6 +380,15 @@ class SquidstatMppt:
         return True
         
 
+    def __del__(self):
+        # For manual experiments, this will stop the experiment running on the Squidstat
+        # if this object no longer exists (when the window is closed or program killed)
+        for (i, channel) in enumerate(self.channel_data):
+            error = self.handler.stopExperiment(i)
+            if error.value() != AisErrorCode.Success:
+                print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
+
+
 class SquidPlotter(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -435,6 +444,17 @@ class SquidPlotter(QMainWindow):
                 ax.set_xlabel("Voltage (V)")
                 ax.set_ylabel("Current Density ($mA/cm^{2}$)")
                 ax.set_title(f"Channel {i+1} JV Data")
+
+
+    # Slot function to handle close event
+    def closeEvent(self, event):
+        reply = QMessageBox.question(self, 'Exit Confirmation', 'Are you sure you want to exit?', 
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+                                    QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()
+        else:
+            event.ignore()
 
 
     def update_plot_data(self, channel_data: list[MpptData]) -> None:
