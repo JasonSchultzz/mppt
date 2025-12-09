@@ -38,6 +38,10 @@ class SquidstatMppt:
         self.handler = self.tracker.getInstrumentHandler(config.device_name)
         self.connect()
 
+        self.periodic_jv_scans = config.periodic_jv_scans
+        self.max_buffer_length = config.buffer_length
+        self.max_buffer_time = config.buffer_time
+
         self.set_JV_parameters(
             high_voltage = config.high_voltage,
             low_voltage = config.low_voltage,
@@ -46,14 +50,11 @@ class SquidstatMppt:
             jv_sample_rate_modifier = config.jv_sample_rate_modifier
         )
         self.set_mppt_parameters(
-            mppt_duration = config.mppt_duration,
-            mppt_step_voltage_mV = config.mppt_step_voltage_mV,
-            mppt_step_time_ms = config.mppt_step_time_ms,
+            duration_seconds = config.mppt_duration,
+            step_voltage_mV = config.mppt_step_voltage_mV,
+            step_time_ms = config.mppt_step_time_ms,
+            sample_interval_ms = config.mppt_sample_interval_ms,
             tolerance = config.mppt_tolerance
-        )
-        self.set_const_voltage_parameters(
-            duration = config.constv_duration,
-            sample_interval = config.constv_sample_interval
         )
 
 
@@ -69,15 +70,6 @@ class SquidstatMppt:
 
         # What happens when an error occurs
         self.handler.deviceError.connect(lambda channel, error: print(f"Device Error: {error}"))
-
-
-    def set_const_voltage_parameters(
-            self,
-            duration: float,
-            sample_interval: float,
-    ) -> None:
-        self.const_voltage_duration = duration
-        self.const_voltage_sample_interval = sample_interval
 
     
     def set_JV_parameters(
@@ -115,14 +107,16 @@ class SquidstatMppt:
 
     def set_mppt_parameters(
             self,
-            mppt_duration: float,
-            mppt_step_voltage_mV: float,
-            mppt_step_time_ms: float,
-            tolerance: float = 0.01
+            duration_seconds: int,
+            step_voltage_mV: int,
+            step_time_ms: int,
+            sample_interval_ms: int,
+            tolerance: float = 1.0
     ) -> None:
-        self.mppt_duration = mppt_duration
-        self.mppt_step_voltage = mppt_step_voltage_mV/1000
-        self.mppt_step_time = mppt_step_time_ms/1000
+        self.mppt_duration = duration_seconds
+        self.mppt_step_voltage = step_voltage_mV/1000
+        self.mppt_step_time = step_time_ms/1000
+        self.mppt_sample_interval = sample_interval_ms/1000
         self.Vo = None
         self.Po = None
         self.mppt_direction = 1
@@ -142,8 +136,8 @@ class SquidstatMppt:
         for (i, channel) in enumerate(self.channel_data):
             constant_potential = AisConstantPotElement(
                 channel.Vmpp,
-                self.const_voltage_sample_interval,
-                self.const_voltage_duration
+                self.mppt_sample_interval,
+                self.mppt_duration
             )
             constant_potential_experiment = AisExperiment()
             constant_potential_experiment.appendElement(constant_potential)
@@ -192,13 +186,14 @@ class SquidstatMppt:
 
             print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
             
-            # Set timer to stop the MPPT experiment
-            if len(self.channel_data) > 1:
-                # NOTE: singleShot doesn't seem to work when multiple channels are used
-                timer.append(self.set_timer(i, self.mppt_duration*1000))
-            else:
-                # NOTE: Appending only 1 QTimer to the list above does not seem to work?
-                QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
+            # Set timer to stop the MPPT experiment if duration is set to end.
+            if self.periodic_jv_scans:
+                if len(self.channel_data) > 1:
+                    # NOTE: singleShot doesn't seem to work when multiple channels are used
+                    timer.append(self.set_timer(i, self.mppt_duration*1000))
+                else:
+                    # NOTE: Appending only 1 QTimer to the list above does not seem to work?
+                    QTimer.singleShot(self.mppt_duration*1000, lambda:self.stop_mppt_experiment(i))
 
 
     def preturb_and_observe(self, channel: int, voltage: float, current: float, timestamp: float)-> None:
@@ -228,6 +223,16 @@ class SquidstatMppt:
             self.set_manual_mppt_voltage(channel, V)
 
         self.channel_data[channel].append_data(voltage, current, timestamp)
+        
+        # No periodic JV scans
+        if not self.periodic_jv_scans:
+            if len(self.channel_data[channel].voltage) > self.max_buffer_length:
+                self.channel_data[channel].format_mpp_results(
+                    self.cell_area,
+                    self.solar_irradiance,
+                    self.path,
+                    self.main_state
+                )
 
 
     # From paper, DOI: https://doi.org/10.5796/electrochemistry.20-00022
@@ -344,7 +349,8 @@ class SquidstatMppt:
             print(f"Time: {datetime.now()}, Channel {channel}: JV scan complete")
             if self.confirm_all_matching_states(self.main_state):
                 print(f"Time: {datetime.now()}, All JV scans complete")
-                self.window.update_plot_data(self.channel_data)
+                self.window.update_jv_plot(self.channel_data)
+                self.window.update_mppt_plot(self.channel_data)
                 if self.main_state == CONST_V_STATE:
                     self.start_const_voltage()
                 elif (self.main_state == P_AND_O_STATE) or (self.main_state == META_P_AND_O_STATE):
@@ -457,10 +463,9 @@ class SquidPlotter(QMainWindow):
             event.ignore()
 
 
-    def update_plot_data(self, channel_data: list[MpptData]) -> None:
+    def update_jv_plot(self, channel_data: list[MpptData]) -> None:
         # Update each plot
         self.axes[4].clear()
-        mppt_channel_colors = ["r", "b", "g", "m"]
         for i, data in enumerate(channel_data):
             ax = self.axes[i]
             ax.clear()  # Clear the old plot
@@ -489,15 +494,25 @@ class SquidPlotter(QMainWindow):
             # ax.set_ylim((None, 0))  # View of Quadrant 4
             ax.legend()
 
-        # Update MPPT plot
-        self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, color = mppt_channel_colors[i], label = f"Forward {i+1}")
-        self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, color = mppt_channel_colors[i], ls = ":", label = f"Reverse {i+1}")
-        
-        self.axes[4].set_xlabel("Duration")
-        self.axes[4].set_ylabel("Normalized PCE")
-        self.axes[4].set_title("MPPT")
-        self.axes[4].legend()
-
         # Refresh the canvas to reflect the changes
         for canvas_item in self.canvas:
             canvas_item.draw()
+
+    
+    def update_mppt_plot(self, channel_data: list[MpptData]) -> None:
+        # Update each plot
+        self.axes[4].clear()
+        mppt_channel_colors = ["r", "b", "g", "m"]
+        for i, data in enumerate(channel_data):
+            # Update MPPT plot
+            self.axes[4].plot(data.forward_durations, data.forward_relative_efficiencies, color = mppt_channel_colors[i], label = f"Forward {i+1}")
+            self.axes[4].plot(data.reverse_durations, data.reverse_relative_efficiencies, color = mppt_channel_colors[i], ls = ":", label = f"Reverse {i+1}")
+            
+            self.axes[4].set_xlabel("Duration")
+            self.axes[4].set_ylabel("Normalized PCE")
+            self.axes[4].set_title("MPPT")
+            self.axes[4].legend()
+
+            # Refresh the canvas to reflect the changes
+            for canvas_item in self.canvas:
+                canvas_item.draw()

@@ -16,7 +16,7 @@ fabricator = "TEST"
 year = "2025"
 
 # Date of fabrication or test as a String
-date = "10-20"
+date = "12-09"
 
 # names assigns names for each individual cell to be tested.
 # This is a list of String values that can be in the range of 1 to 4 cells long,
@@ -61,27 +61,41 @@ jv_sample_rate_modifier = 1
 #                     scan is needed, it goes back 2 voltage increments, then increases by 1.
 mppt_method = "Metastable P&O"
 
-
-# Settings if "Constant Voltage" is selected above
-[constant_voltage]
-# How long the constant voltage state is applied between JV scans in seconds. (Integer only)
-duration = 10
-
-# Duration between each measurement taken during constant voltage state in seconds. (Integer only)
-sample_interval = 1
+# Choose whether to include JV scans perioically after chosen duration has elapsed.
+# If true, it will bypass set MPPT duration and will continue MPPT after initial JV
+# scan until program is manually closed by user.
+# Selecting Constant Voltage as MPPT_Method will not consider this as a preset
+# Squidstat function call requires a finite duration.
+periodic_jv_scans = false
 
 
-# Settings for Simple P&O and Metastable P&O options
+# Settings for MPPT process
 [mppt]
 # Duration of the mppt procedure between JV scans in seconds (Integer only)
+# Will only apply if periodic_jv_scans is set to true or Constant Voltage is selected
 duration = 10
 
 # Change in voltage pertubation during mppt in mV (Float or Integer)
+# Does not apply to Constant Voltage option
 step_voltage_mV = 10
 
 # Duration before perturbing the voltage again in ms (Integer only)
-step_time_ms = 300
+# Does not apply to Constant Voltage option
+step_time_ms = 500
+
+# Duration between each measurement taken during constant voltage state in ms. (Integer only)
+sample_interval = 1000
 
 # Used in the Metastable P&O algorithm. Allows PCE to settle before perturbing voltage again
 # Will start perturbing voltage after PCE is within X% of previous PCE measurement (Float or Integer)
-tolerance = 0.5
+tolerance = 5
+
+
+# Settings for determining how the buffer for storing data during MPPT works
+[buffer]
+# Maximum length the buffer will reach before releasing data to csv (Integer only)
+max_length = 100
+
+# Maximum amount of time before the buffer will release data to csv in seconds (Integer only)
+# NOTE: Currently does nothing
+max_time = 30

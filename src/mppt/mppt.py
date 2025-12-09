@@ -17,9 +17,7 @@ REVERSE_SCAN = "Reverse"
 
 class MpptData:
     def __init__(self, name: str) -> None:
-        self.voltage = []
-        self.current = []
-        self.timestamp = []
+        self.reset_data()
         self.sweep_data_list = []
         self.name = name
         self.state = JV_STATE
@@ -51,6 +49,12 @@ class MpptData:
         self.first: bool = True
 
 
+    def reset_data(self) -> None:
+        self.voltage = []
+        self.current = []
+        self.timestamp = []
+
+
     def append_data(self, voltage: float, current: float, timestamp: datetime):
         self.voltage.append(voltage)
         self.current.append(current)
@@ -65,9 +69,7 @@ class MpptData:
                 "Current (A)": self.current
                 }
             )
-            self.voltage = []
-            self.current = []
-            self.timestamp = []
+            self.reset_data()
 
 
     def format_results(
@@ -318,6 +320,7 @@ class MpptData:
             directory: str,
             mpp_state: str
     ) -> None:
+        # Check to see that the voltage and current lists have data in it
         if not self.voltage or not self.current:
             return
         
@@ -346,9 +349,7 @@ class MpptData:
         #     with pd.ExcelWriter(filename, mode = "w") as writer:
         #         compiled_data.to_excel(writer, sheet_name = "MPPT")
 
-        self.timestamp = []
-        self.voltage = []
-        self.current = []
+        self.reset_data()
 
 
 @dataclass
@@ -369,14 +370,16 @@ class InputData:
     jv_step_time_ms: int
     jv_sample_rate_modifier: int
     mppt_method: str
-
-    constv_duration: int
-    constv_sample_interval: float | int
+    periodic_jv_scans: bool
 
     mppt_duration: int
     mppt_step_voltage_mV: float | int
     mppt_step_time_ms: int
+    mppt_sample_interval_ms: int
     mppt_tolerance: float | int
+
+    buffer_length: int
+    buffer_time: int
 
 
     def __init__(self, file: str) -> None:
@@ -399,14 +402,16 @@ class InputData:
         self.jv_step_time_ms = config["experiment"]["jv_step_time_ms"]
         self.jv_sample_rate_modifier = config["experiment"]["jv_sample_rate_modifier"]
         self.mppt_method = config["experiment"]["mppt_method"]
-
-        self.constv_duration = config["constant_voltage"]["duration"]
-        self.constv_sample_interval = config["constant_voltage"]["sample_interval"]
+        self.periodic_jv_scans = config["experiment"]["periodic_jv_scans"]
 
         self.mppt_duration = config["mppt"]["duration"]
         self.mppt_step_voltage_mV = config["mppt"]["step_voltage_mV"]
         self.mppt_step_time_ms = config["mppt"]["step_time_ms"]
+        self.mppt_sample_interval_ms = config["mppt"]["sample_interval"]
         self.mppt_tolerance = config["mppt"]["tolerance"]
+
+        self.buffer_length = config["buffer"]["max_length"]
+        self.buffer_time = config["buffer"]["max_time"]
 
         self.validate()
 
@@ -446,17 +451,21 @@ class InputData:
             raise ValueError(f"JV sample rate modifier '{self.jv_sample_rate_modifier}' must be a integer.")
         if (self.mppt_method != CONST_V_STATE) and (self.mppt_method != P_AND_O_STATE) and (self.mppt_method != META_P_AND_O_STATE):
             raise ValueError(f"Invalid MPPT method '{self.mppt_method}'. Viable options are:\n  {CONST_V_STATE}\n  {P_AND_O_STATE}\n  {META_P_AND_O_STATE}")
-        
-        if not isinstance(self.constv_duration, int):
-            raise ValueError(f"Constant voltage duration '{self.constv_duration}' must be a integer.")
-        if not isinstance(self.constv_sample_interval, (float, int)):
-            raise ValueError(f"Constant voltage sample interval'{self.constv_sample_interval}' must be a float or integer.")
-        
+        if not isinstance(self.periodic_jv_scans, bool):
+            raise ValueError(f"Periodic JV scans '{self.periodic_jv_scans}' must be a boolean.")
+
         if not isinstance(self.mppt_duration, int):
             raise ValueError(f"MPPT duration '{self.mppt_duration}' must be a integer.")
         if not isinstance(self.mppt_step_voltage_mV, (float, int)):
             raise ValueError(f"MPPT step voltage '{self.mppt_step_voltage_mV}' must be a float or integer.")
         if not isinstance(self.mppt_step_time_ms, int):
             raise ValueError(f"MPPT step time '{self.mppt_step_time_ms}' must be a integer.")
+        if not isinstance(self.mppt_sample_interval_ms, int):
+            raise ValueError(f"MPPT sample interval'{self.mppt_sample_interval_ms}' must be an integer.")
         if not isinstance(self.mppt_tolerance, (float, int)):
             raise ValueError(f"MPPT tolerance '{self.mppt_tolerance}' must be a float or integer.")
+        
+        if not isinstance(self.buffer_length, int):
+            raise ValueError(f"Max Buffer length '{self.buffer_length}' must be an integer.")
+        if not isinstance(self.buffer_time, int):
+            raise ValueError(f"Max Buffer time '{self.buffer_time}' must be an integer.")
