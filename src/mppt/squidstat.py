@@ -184,8 +184,11 @@ class SquidstatMppt:
             if error.value() != AisErrorCode.Success:
                 print(f"Time: {datetime.now()}, Channel {i}: {error.message()}")
 
-            print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
-            
+            if self.periodic_jv_scans:
+                print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V for {self.mppt_duration} seconds.")
+            else:
+                print(f"Time: {datetime.now()}, Channel {i}: MPPT started at {self.channel_data[i].Vmpp:.2f} V until stopped.")
+
             # Set timer to stop the MPPT experiment if duration is set to end.
             if self.periodic_jv_scans:
                 if len(self.channel_data) > 1:
@@ -290,6 +293,16 @@ class SquidstatMppt:
                     self.set_manual_mppt_voltage(channel, V)
 
         self.channel_data[channel].append_data(voltage, current, timestamp)
+
+        # No periodic JV scans
+        if not self.periodic_jv_scans:
+            if len(self.channel_data[channel].voltage) > self.max_buffer_length:
+                self.channel_data[channel].format_mpp_results(
+                    self.cell_area,
+                    self.solar_irradiance,
+                    self.path,
+                    self.main_state
+                )
 
 
     # Function is called when a new experiment element starts
